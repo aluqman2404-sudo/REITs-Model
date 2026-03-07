@@ -16,6 +16,9 @@ plotly>=5.18.0
 streamlit>=1.30.0
 streamlit-folium>=0.18.0
 
+# ODS file reading (MHCLG live tables)
+odfpy>=1.4.1
+
 # Geospatial / regional maps
 folium>=0.15.0
 geopandas>=0.14.0
