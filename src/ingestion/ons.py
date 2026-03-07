@@ -1,257 +1,330 @@
 """
 Stage 2: ONS data ingestion.
-Pulls CPI, regional earnings, and population via the ONS API and bulk downloads.
+Uses the ONS Generator API (more stable than the timeseries API).
 
-ONS API base: https://api.ons.gov.uk/v1
-Format: GET /datasets/{dataset_id}/timeseries/{series_id}/data
-Returns JSON with keys: months, quarters, years
+Generator URL format:
+  https://www.ons.gov.uk/generator?format=csv&uri=/...timeseries/{series}/{dataset}
+
+CSV format returned:
+  Several header rows (title, CDid, unit, release date, notes)
+  Then:  "Time","Value"
+         "Jan 2015","100.0"
 """
 
 import io
+import time
 import requests
 import pandas as pd
 from datetime import datetime
 from config.settings import DATA_RAW, PARAMS
 
-_ONS_API = "https://api.ons.gov.uk/v1"
 _START_YEAR = PARAMS["project"]["base_year"]   # 2000
 _REGIONS    = PARAMS["project"]["regions"]
 
-# ── ONS series identifiers ───────────────────────────────────────────────────
-# CPI all items index (base 2015=100) — dataset MM23
-_CPI_DATASET  = "mm23"
-_CPI_SERIES   = "d7bt"
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    )
+}
 
-# CPIH (used as fallback if CPI series unavailable)
-_CPIH_DATASET = "cpih01"
-_CPIH_SERIES  = "l522"
+# ONS Generator URLs — more stable than the timeseries API
+_ONS_GENERATOR = "https://www.ons.gov.uk/generator?format=csv&uri={uri}"
+
+_SERIES = {
+    "cpi":             "/economy/inflationandpriceindices/timeseries/d7bt/mm23",
+    "cpih":            "/economy/inflationandpriceindices/timeseries/l522/cpih01",
+    # AWE whole economy — seasonally adjusted total pay (£/week)
+    "earnings_weekly": "/employmentandlabourmarket/peopleinwork/earningsandworkinghours/timeseries/kab9/emp",
+    # AWE whole economy — not seasonally adjusted (fallback)
+    "earnings_median": "/employmentandlabourmarket/peopleinwork/earningsandworkinghours/timeseries/kai7/emp",
+}
 
 
 # ── Public API ───────────────────────────────────────────────────────────────
 
 def fetch_ons_cpi(save: bool = True) -> pd.DataFrame:
     """
-    Fetch monthly CPI index (all items, base 2015=100) from ONS API.
+    Fetch monthly CPI index (all items, base 2015=100).
+    Falls back to CPIH if CPI series unavailable.
 
-    Returns:
-        DataFrame with columns: date, cpi
+    Returns DataFrame with columns: date, cpi
     """
-    print("Fetching ONS CPI (MM23 D7BT)...")
-    df = _fetch_timeseries(_CPI_DATASET, _CPI_SERIES, freq="months")
+    print("  Fetching ONS CPI (D7BT)...")
+    try:
+        df = _fetch_generator(_SERIES["cpi"])
+    except Exception as e:
+        print(f"  CPI failed ({e}), trying CPIH fallback...")
+        df = _fetch_generator(_SERIES["cpih"])
 
     df = df.rename(columns={"value": "cpi"})
-    df = df[df["date"].dt.year >= _START_YEAR].copy()
+    df = df[df["date"].dt.year >= _START_YEAR].reset_index(drop=True)
 
     if save:
         path = DATA_RAW / f"ons_cpi_{datetime.today():%Y%m}.csv"
         df.to_csv(path, index=False)
-        print(f"Saved {len(df):,} rows → {path}")
+        print(f"  Saved {len(df):,} rows → {path.name}")
 
     return df
 
 
 def fetch_ons_earnings(save: bool = True) -> pd.DataFrame:
     """
-    Fetch ONS median annual earnings by region (ASHE Table 7).
-    Published annually — will be interpolated to monthly in Stage 3.
+    Fetch ONS median weekly earnings (national, from EARN01).
+    Regional earnings require the ASHE publication — handled separately.
 
-    The ASHE regional earnings are not in the main ONS API; this function
-    downloads the published CSV from the ONS bulk download service.
-
-    Returns:
-        DataFrame with columns: date, region, median_annual_earnings
+    Returns DataFrame with columns: date, region, median_annual_earnings
     """
-    print("Fetching ONS regional earnings (ASHE Table 7)...")
-
-    # ONS ASHE Table 7 — median gross annual earnings by region
-    # Published each autumn for the previous tax year
-    url = (
-        "https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/"
-        "peopleinwork/earningsandworkinghours/datasets/"
-        "regionbyoccupation4digitsoc2010ashetable7/"
-        "2023provisional/table72023provisional.csv"
-    )
+    print("  Fetching ONS earnings (EARN01 KAI7)...")
+    time.sleep(1)  # avoid rate-limiting after CPI call
 
     try:
-        df = _download_ashe_regional(url)
-    except Exception as e:
-        print(f"ASHE bulk download failed ({e}). Falling back to national EARN01 series.")
-        df = _fetch_earn01_national()
+        df = _fetch_generator(_SERIES["earnings_weekly"], freq="quarterly")
+    except Exception:
+        time.sleep(2)
+        df = _fetch_generator(_SERIES["earnings_median"], freq="quarterly")
+
+    df["median_annual_earnings"] = df["value"] * 52
+    df["region"] = "United Kingdom"
+    df = df[df["date"].dt.year >= _START_YEAR]
+    df = df[["date", "region", "median_annual_earnings"]].reset_index(drop=True)
 
     if save:
         path = DATA_RAW / f"ons_earnings_{datetime.today():%Y%m}.csv"
         df.to_csv(path, index=False)
-        print(f"Saved {len(df):,} rows → {path}")
+        print(f"  Saved {len(df):,} rows → {path.name}")
+        print("  Note: national series only. Regional ASHE data → fetch_ons_earnings_regional()")
 
     return df
+
+
+def fetch_ons_earnings_regional(save: bool = True) -> pd.DataFrame:
+    """
+    Download ASHE Table 7 regional annual earnings CSV from ONS bulk downloads.
+    This is a separate, annual publication — interpolated to monthly in Stage 3.
+
+    Returns DataFrame with columns: date, region, median_annual_earnings
+    """
+    print("  Fetching ONS ASHE regional earnings (Table 7)...")
+    # Try multiple known ASHE Table 7 URLs (ONS updates these each autumn)
+    ashe_urls = [
+        "https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/"
+        "earningsandworkinghours/datasets/regionbyoccupation4digitsoc2010ashetable7/"
+        "2024revised/table72024revised.csv",
+        "https://www.ons.gov.uk/file?uri=/employmentandlabourmarket/peopleinwork/"
+        "earningsandworkinghours/datasets/regionbyoccupation4digitsoc2010ashetable7/"
+        "2023provisional/table72023provisional.csv",
+    ]
+    for url in ashe_urls:
+        try:
+            r = requests.get(url, headers=_HEADERS, timeout=60)
+            r.raise_for_status()
+            df = _parse_ashe_regional(r.text)
+            if save:
+                path = DATA_RAW / f"ons_earnings_regional_{datetime.today():%Y%m}.csv"
+                df.to_csv(path, index=False)
+                print(f"  Saved {len(df):,} rows → {path.name}")
+            return df
+        except Exception as e:
+            print(f"  ASHE URL failed: {e}")
+            time.sleep(1)
+
+    raise RuntimeError(
+        "All ASHE regional earnings URLs failed.\n"
+        "Download manually from: https://www.ons.gov.uk/employmentandlabourmarket/"
+        "peopleinwork/earningsandworkinghours/datasets/"
+        "regionbyoccupation4digitsoc2010ashetable7\n"
+        "Save to data/raw/ons_earnings_regional_YYYYMM.csv"
+    )
 
 
 def fetch_ons_population(save: bool = True) -> pd.DataFrame:
     """
     Fetch ONS mid-year population estimates by region (annual).
-    Will be interpolated to monthly in Stage 3.
+    Interpolated to monthly in Stage 3.
 
-    Returns:
-        DataFrame with columns: date, region, population
+    Returns DataFrame with columns: date, region, population
     """
-    print("Fetching ONS regional population estimates...")
+    print("  Fetching ONS population estimates...")
+    time.sleep(1)
 
-    # ONS mid-year population estimates — published annually
-    url = (
+    # Try multiple known population estimate URLs (mid2024 is latest as of 2025)
+    pop_urls = [
         "https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/"
         "populationandmigration/populationestimates/datasets/"
         "populationestimatesforukenglandandwalesscotlandandnorthernireland/"
-        "mid2022/ukpopestimatesmid2022on2021geography.csv"
+        "mid2024/ukpopestimatesmid2024on2021geography.csv",
+        "https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/"
+        "populationandmigration/populationestimates/datasets/"
+        "populationestimatesforukenglandandwalesscotlandandnorthernireland/"
+        "mid2023/ukpopestimatesmid2023on2021geography.csv",
+    ]
+
+    for url in pop_urls:
+        try:
+            time.sleep(3)  # ONS rate limiting — wait between requests
+            r = requests.get(url, headers=_HEADERS, timeout=60)
+            r.raise_for_status()
+            df = _parse_population_csv(r.content)
+            if save:
+                path = DATA_RAW / f"ons_population_{datetime.today():%Y%m}.csv"
+                df.to_csv(path, index=False)
+                print(f"  Saved {len(df):,} rows → {path.name}")
+            return df
+        except Exception as e:
+            print(f"  Population URL failed: {e}")
+            time.sleep(1)
+
+    raise RuntimeError(
+        "Population download failed.\n"
+        "Download manually from: https://www.ons.gov.uk/peoplepopulationandcommunity/"
+        "populationandmigration/populationestimates\n"
+        "Save to data/raw/ons_population_YYYYMM.csv"
     )
-
-    try:
-        response = requests.get(url, timeout=60)
-        response.raise_for_status()
-        df = _parse_population_csv(response.content)
-    except Exception as e:
-        print(f"Population download failed ({e}). Creating placeholder.")
-        df = _population_placeholder()
-
-    if save:
-        path = DATA_RAW / f"ons_population_{datetime.today():%Y%m}.csv"
-        df.to_csv(path, index=False)
-        print(f"Saved {len(df):,} rows → {path}")
-
-    return df
 
 
 def fetch_ons_series(dataset_id: str, series_id: str, freq: str = "months", save: bool = True) -> pd.DataFrame:
-    """
-    Generic ONS API timeseries fetch. Useful for pulling any additional series.
-
-    Args:
-        dataset_id: ONS dataset ID (e.g. 'mm23')
-        series_id:  ONS series ID (e.g. 'd7bt')
-        freq:       'months', 'quarters', or 'years'
-
-    Returns:
-        DataFrame with columns: date, value
-    """
-    df = _fetch_timeseries(dataset_id, series_id, freq=freq)
-
+    """Generic fetch for any ONS timeseries via the generator URL."""
+    uri = f"/economy/timeseries/{series_id}/{dataset_id}"
+    df = _fetch_generator(uri)
     if save:
         path = DATA_RAW / f"ons_{dataset_id}_{series_id}_{datetime.today():%Y%m}.csv"
         df.to_csv(path, index=False)
-        print(f"Saved {len(df):,} rows → {path}")
-
     return df
 
 
 # ── Internal helpers ─────────────────────────────────────────────────────────
 
-def _fetch_timeseries(dataset_id: str, series_id: str, freq: str = "months") -> pd.DataFrame:
-    """Hit the ONS API timeseries endpoint and return a clean DataFrame."""
-    url = f"{_ONS_API}/datasets/{dataset_id}/timeseries/{series_id}/data"
-    response = requests.get(url, timeout=30)
-    response.raise_for_status()
-    data = response.json()
+def _fetch_generator(uri: str, freq: str = "monthly") -> pd.DataFrame:
+    """
+    Fetch a series from the ONS generator CSV endpoint.
 
-    records = data.get(freq, [])
-    if not records:
-        raise ValueError(f"No '{freq}' data returned for {dataset_id}/{series_id}")
+    The ONS generator returns rows in this format (no header row for data):
+      Metadata rows:  "Title","..."  "CDID","..."  etc.  (first 8 rows)
+      Annual rows:    "1988","49.6"
+      Quarterly rows: "1988 Q1","48.6"
+      Monthly rows:   "1988 JAN","48.4"
 
-    rows = []
-    for obs in records:
-        raw_date = obs.get("date", "")
-        value    = obs.get("value", "")
-        if value in ("", ".", None):
+    Args:
+        uri:  ONS URI path (e.g. /economy/...timeseries/d7bt/mm23)
+        freq: 'monthly', 'quarterly', or 'annual' — which rows to keep
+    """
+    url = _ONS_GENERATOR.format(uri=uri)
+    r = requests.get(url, headers=_HEADERS, timeout=30)
+    r.raise_for_status()
+
+    import csv
+    rows = list(csv.reader(r.text.splitlines()))
+
+    # Skip metadata rows (Title, CDID, Source, PreUnit, Unit, Release, Next, Notes)
+    _METADATA_KEYS = {"title", "cdid", "source dataset id", "preunit", "unit",
+                      "release date", "next release", "important notes"}
+    data_rows = []
+    for row in rows:
+        if len(row) < 2:
             continue
+        if row[0].strip().lower() in _METADATA_KEYS:
+            continue
+        data_rows.append(row)
+
+    if not data_rows:
+        raise ValueError(f"No data rows found in ONS response for {uri}")
+
+    records = []
+    _MONTHS = {"JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"}
+
+    for row in data_rows:
+        date_str = row[0].strip()
+        val_str  = row[1].strip()
+
+        # Classify row type
+        parts = date_str.upper().split()
+        if len(parts) == 2 and parts[1] in _MONTHS:
+            row_freq = "monthly"
+        elif len(parts) == 2 and parts[1].startswith("Q"):
+            row_freq = "quarterly"
+        elif len(parts) == 1 and parts[0].isdigit():
+            row_freq = "annual"
+        else:
+            continue
+
+        if row_freq != freq:
+            continue
+
         try:
-            rows.append({"date": _parse_ons_date(raw_date, freq), "value": float(value)})
+            date  = _parse_ons_date(date_str, row_freq)
+            value = float(val_str)
+            records.append({"date": date, "value": value})
         except (ValueError, TypeError):
             continue
 
-    df = pd.DataFrame(rows)
+    if not records:
+        raise ValueError(f"No {freq} rows found in ONS response for {uri}")
+
+    df = pd.DataFrame(records)
     df["date"] = pd.to_datetime(df["date"])
-    df = df.sort_values("date").reset_index(drop=True)
-    return df
+    return df.sort_values("date").reset_index(drop=True)[["date", "value"]]
 
 
-def _parse_ons_date(raw: str, freq: str) -> str:
-    """Convert ONS date strings like '2020 JAN', '2020 Q1', '2020' to ISO format."""
-    raw = raw.strip()
-    if freq == "months":
-        return pd.to_datetime(raw, format="%Y %b").strftime("%Y-%m-%d")
-    elif freq == "quarters":
-        year, q = raw.split(" Q")
-        month = int(q) * 3 - 2
+def _parse_ons_date(date_str: str, freq: str) -> str:
+    """Convert a single ONS date string to ISO format."""
+    _MONTH_MAP = {
+        "JAN": "01", "FEB": "02", "MAR": "03", "APR": "04",
+        "MAY": "05", "JUN": "06", "JUL": "07", "AUG": "08",
+        "SEP": "09", "OCT": "10", "NOV": "11", "DEC": "12",
+    }
+    parts = date_str.upper().split()
+    if freq == "monthly":
+        year, month_abbr = parts
+        return f"{year}-{_MONTH_MAP[month_abbr]}-01"
+    elif freq == "quarterly":
+        year, q = parts
+        month = int(q[1]) * 3 - 2
         return f"{year}-{month:02d}-01"
-    elif freq == "years":
-        return f"{raw}-01-01"
-    return raw
+    else:  # annual
+        return f"{parts[0]}-01-01"
 
 
-def _download_ashe_regional(url: str) -> pd.DataFrame:
-    """
-    Download and parse an ASHE regional earnings CSV.
-    Returns long-format DataFrame: date, region, median_annual_earnings
-    """
-    response = requests.get(url, timeout=60)
-    response.raise_for_status()
-
-    # ASHE files are typically wide-format — region rows, year columns
-    raw = pd.read_csv(io.StringIO(response.text), skiprows=4, low_memory=False)
-
-    # Melt to long format — exact parsing depends on file structure
-    # This is a best-effort parse; may need adjustment per ASHE file version
+def _parse_ashe_regional(text: str) -> pd.DataFrame:
+    """Parse ASHE Table 7 regional earnings CSV into long format."""
+    raw = pd.read_csv(io.StringIO(text), skiprows=4, low_memory=False)
     region_col = raw.columns[0]
-    year_cols  = [c for c in raw.columns if str(c).strip().isdigit()]
+    year_cols  = [c for c in raw.columns[1:] if str(c).strip().isdigit()]
 
     df = raw[[region_col] + year_cols].copy()
     df = df.rename(columns={region_col: "region"})
     df = df[df["region"].isin(_REGIONS)]
     df = df.melt(id_vars="region", var_name="year", value_name="median_annual_earnings")
-    df["date"]                   = pd.to_datetime(df["year"].astype(str) + "-04-01")  # tax year reference
-    df["median_annual_earnings"] = pd.to_numeric(df["median_annual_earnings"], errors="coerce")
+    df["date"] = pd.to_datetime(df["year"].astype(str) + "-04-01")
+    df["median_annual_earnings"] = pd.to_numeric(
+        df["median_annual_earnings"].astype(str).str.replace(",", ""), errors="coerce"
+    )
     df = df.dropna(subset=["median_annual_earnings"])
     df = df[df["date"].dt.year >= _START_YEAR]
-
     return df[["date", "region", "median_annual_earnings"]].sort_values(["region", "date"]).reset_index(drop=True)
 
 
-def _fetch_earn01_national() -> pd.DataFrame:
-    """
-    Fallback: fetch national median weekly earnings from ONS API (EARN01).
-    Returns DataFrame with a single 'United Kingdom' region entry.
-    """
-    # EARN01 — median weekly earnings, whole economy (series KAI7)
-    df = _fetch_timeseries("earn01", "kai7", freq="quarters")
-    df["region"]                  = "United Kingdom"
-    df["median_annual_earnings"]  = df["value"] * 52
-    df["date"]                    = df["date"].dt.to_period("Q").dt.to_timestamp()
-    return df[["date", "region", "median_annual_earnings"]]
-
-
 def _parse_population_csv(content: bytes) -> pd.DataFrame:
-    """Parse the ONS mid-year population estimates CSV into long format."""
-    raw = pd.read_csv(io.BytesIO(content), skiprows=7, low_memory=False)
-
-    region_col  = raw.columns[0]
-    year_cols   = [c for c in raw.columns if str(c).strip().isdigit()]
+    """Parse ONS population estimates CSV into long format."""
+    import numpy as np
+    for skip in range(4, 12):
+        try:
+            raw = pd.read_csv(io.BytesIO(content), skiprows=skip, low_memory=False)
+            region_col = raw.columns[0]
+            year_cols  = [c for c in raw.columns[1:] if str(c).strip().isdigit()]
+            if len(year_cols) > 5:
+                break
+        except Exception:
+            continue
 
     df = raw[[region_col] + year_cols].copy()
     df = df.rename(columns={region_col: "region"})
     df = df[df["region"].isin(_REGIONS)]
     df = df.melt(id_vars="region", var_name="year", value_name="population")
-    df["date"]       = pd.to_datetime(df["year"].astype(str) + "-06-30")  # mid-year
-    df["population"] = pd.to_numeric(df["population"], errors="coerce")
+    df["date"]       = pd.to_datetime(df["year"].astype(str) + "-06-30")
+    df["population"] = pd.to_numeric(
+        df["population"].astype(str).str.replace(",", ""), errors="coerce"
+    )
     df = df.dropna(subset=["population"])
     df = df[df["date"].dt.year >= _START_YEAR]
-
     return df[["date", "region", "population"]].sort_values(["region", "date"]).reset_index(drop=True)
-
-
-def _population_placeholder() -> pd.DataFrame:
-    """Minimal placeholder so the pipeline doesn't break if download fails."""
-    import numpy as np
-    dates   = pd.date_range("2000-06-30", "2024-06-30", freq="YE")
-    rows    = []
-    for region in _REGIONS:
-        for d in dates:
-            rows.append({"date": d, "region": region, "population": np.nan})
-    return pd.DataFrame(rows)

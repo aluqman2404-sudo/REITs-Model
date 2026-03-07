@@ -4,99 +4,138 @@ Downloads the full monthly price paid dataset by region.
 
 Source: HM Land Registry Open Data S3 bucket (no auth required)
 Frequency: Monthly
-Coverage: England & Wales from Jan 1995; Scotland/NI added later
 """
 
 import io
+import re
 import requests
 import pandas as pd
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import datetime
 
 from config.settings import DATA_RAW, PARAMS
 
-# Regions to keep (ONS standard + Scotland/NI from separate series)
 _TARGET_REGIONS = set(PARAMS["project"]["regions"])
 
-_S3_BASE = (
-    "http://prod.publicdata.landregistry.gov.uk"
-    ".s3-website-eu-west-1.amazonaws.com"
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    )
+}
+
+# Stable GOV.UK page listing all HPI downloads — scrape it for the current URL
+_GOV_UK_HPI_PAGE = (
+    "https://www.gov.uk/government/statistical-data-sets/"
+    "uk-house-price-index-data-downloads-august-2023"
+)
+
+# Fallback: try to find the page via the collection index
+_GOV_UK_HPI_COLLECTION = (
+    "https://www.gov.uk/government/collections/uk-house-price-index-reports"
 )
 
 
-def _latest_hpi_url() -> str:
+def _find_latest_url() -> tuple[str, str]:
     """
-    Try months backwards from today until a valid CSV URL is found.
-    The Land Registry typically publishes with a ~6-week lag.
+    Scrape the GOV.UK Land Registry HPI page to find the current full-file CSV URL.
+    Returns (url, label).
     """
-    today = datetime.today()
-    for months_back in range(2, 8):
-        candidate = today - timedelta(days=30 * months_back)
-        url = f"{_S3_BASE}/UK-HPI-full-file-{candidate.year}-{candidate.month:02d}.csv"
+    from bs4 import BeautifulSoup
+
+    # Try the direct data page first, then collection index
+    for page_url in [_GOV_UK_HPI_PAGE, _GOV_UK_HPI_COLLECTION]:
         try:
-            r = requests.head(url, timeout=10)
-            if r.status_code == 200:
-                return url
-        except requests.RequestException:
+            r = requests.get(page_url, headers=_HEADERS, timeout=15)
+            r.raise_for_status()
+            soup = BeautifulSoup(r.text, "lxml")
+
+            # Find all links pointing to the S3 HPI full file
+            for a in soup.find_all("a", href=True):
+                href = a["href"]
+                m = re.search(r"UK-HPI-full-file-(\d{4}-\d{2})\.csv", href, re.IGNORECASE)
+                if m:
+                    label = m.group(1)
+                    # Ensure it's a full URL
+                    if not href.startswith("http"):
+                        href = "https://prod.publicdata.landregistry.gov.uk" \
+                               ".s3-website-eu-west-1.amazonaws.com/" + href.lstrip("/")
+                    return href, label
+        except Exception:
             continue
-    raise RuntimeError("Could not find a valid Land Registry HPI file in the last 8 months.")
+
+    # Final fallback — the S3 path is deterministic; try the most likely recent months
+    # (Land Registry publishes ~8 weeks after reference month)
+    from dateutil.relativedelta import relativedelta
+    from datetime import date
+    today = date.today()
+    for months_back in range(3, 9):
+        candidate = today - relativedelta(months=months_back)
+        url = (
+            "https://prod.publicdata.landregistry.gov.uk"
+            ".s3-website-eu-west-1.amazonaws.com"
+            f"/UK-HPI-full-file-{candidate.year}-{candidate.month:02d}.csv"
+        )
+        try:
+            r = requests.get(url, headers=_HEADERS, stream=True, timeout=10)
+            if r.status_code == 200:
+                r.close()
+                return url, candidate.strftime("%Y-%m")
+        except Exception:
+            continue
+
+    raise RuntimeError(
+        "Could not locate Land Registry HPI full file automatically.\n"
+        "Download manually from:\n"
+        "  https://www.gov.uk/government/collections/uk-house-price-index-reports\n"
+        "Save the 'UK HPI full file' CSV to:\n"
+        f"  {DATA_RAW / 'land_registry_hpi_YYYYMM.csv'}"
+    )
 
 
 def fetch_land_registry(url: str | None = None, save: bool = True) -> pd.DataFrame:
     """
     Download and parse the HM Land Registry UK HPI full dataset.
 
-    Args:
-        url:  Override the auto-detected URL (optional)
-        save: If True, saves raw CSV to data/raw/
-
-    Returns:
-        DataFrame with columns:
-            date, region, average_price, index, sales_volume
+    Returns DataFrame with columns: date, region, average_price, sales_volume
     """
     if url is None:
-        url = _latest_hpi_url()
+        url, label = _find_latest_url()
+        print(f"  Latest file: {label}")
+    else:
+        label = "custom"
 
-    print(f"Downloading Land Registry HPI from:\n  {url}")
-    response = requests.get(url, timeout=120)
+    print(f"  URL: {url}")
+    response = requests.get(url, headers=_HEADERS, timeout=180)
     response.raise_for_status()
 
     df = pd.read_csv(io.StringIO(response.text), low_memory=False)
-
-    # Standardise column names
     df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
+    df["date"] = pd.to_datetime(df["date"], dayfirst=True, errors="coerce")
 
-    # Parse date
-    df["date"] = pd.to_datetime(df["date"], dayfirst=True)
+    # Find and standardise the region column
+    region_col = next(
+        (c for c in df.columns if c in ("regionname", "region_name", "areaofresidence")),
+        None
+    )
+    if region_col is None:
+        raise KeyError(f"Region column not found. Columns: {list(df.columns)}")
 
-    # Keep only region-level rows (drop national aggregate)
-    region_col = _detect_region_col(df)
     df = df.rename(columns={region_col: "region"})
     df = df[df["region"].isin(_TARGET_REGIONS)].copy()
 
-    # Select and rename key columns
-    col_map = {
-        "averageprice":   "average_price",
-        "average_price":  "average_price",
-        "index":          "index",
-        "salesvolume":    "sales_volume",
-        "sales_volume":   "sales_volume",
+    # Standardise price/volume column names
+    rename = {
+        "averageprice": "average_price",
+        "salesvolume":  "sales_volume",
     }
-    keep = ["date", "region"] + [c for c in df.columns if c in col_map]
-    df = df[keep].rename(columns=col_map)
-    df = df.sort_values(["region", "date"]).reset_index(drop=True)
+    df = df.rename(columns=rename)
+
+    keep = [c for c in ["date", "region", "average_price", "index", "sales_volume"] if c in df.columns]
+    df = df[keep].sort_values(["region", "date"]).reset_index(drop=True)
 
     if save:
-        out_path = DATA_RAW / f"land_registry_hpi_{datetime.today():%Y%m}.csv"
-        df.to_csv(out_path, index=False)
-        print(f"Saved {len(df):,} rows → {out_path}")
+        out = DATA_RAW / f"land_registry_hpi_{datetime.today():%Y%m}.csv"
+        df.to_csv(out, index=False)
+        print(f"  Saved {len(df):,} rows → {out.name}")
 
     return df
-
-
-def _detect_region_col(df: pd.DataFrame) -> str:
-    """Find the region column regardless of exact naming in the CSV."""
-    for candidate in ["regionname", "region_name", "areaofresidence", "name"]:
-        if candidate in df.columns:
-            return candidate
-    raise KeyError(f"Cannot find region column. Available: {list(df.columns)}")
