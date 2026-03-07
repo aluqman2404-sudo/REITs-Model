@@ -1,0 +1,91 @@
+{
+  "_comment": "Central parameter store. OLS calibration (Stage 4) will overwrite the model section.",
+
+  "project": {
+    "name": "UK Housing Market Model",
+    "version": "0.1.0",
+    "base_year": 2000,
+    "end_year": 2024,
+    "date_frequency": "monthly",
+    "regions": [
+      "East Midlands",
+      "East of England",
+      "London",
+      "North East",
+      "North West",
+      "South East",
+      "South West",
+      "West Midlands",
+      "Yorkshire and The Humber",
+      "Wales",
+      "Scotland",
+      "Northern Ireland"
+    ]
+  },
+
+  "data_sources": {
+    "land_registry": {
+      "url": "https://www.gov.uk/government/statistical-data-sets/uk-house-price-index-data-downloads-august-2023",
+      "frequency": "monthly",
+      "notes": "HM Land Registry UK HPI — regional average prices"
+    },
+    "ons_income": {
+      "dataset_id": "EARN01",
+      "frequency": "quarterly",
+      "notes": "ONS median weekly earnings by region — interpolate to monthly"
+    },
+    "boe_base_rate": {
+      "url": "https://www.bankofengland.co.uk/boeapps/database/Bank-Rate.asp",
+      "frequency": "irregular",
+      "notes": "BoE official bank rate — forward-fill to monthly"
+    },
+    "ons_population": {
+      "dataset_id": "POP",
+      "frequency": "annual",
+      "notes": "ONS mid-year population estimates — interpolate to monthly"
+    },
+    "ons_cpi": {
+      "dataset_id": "MM23",
+      "frequency": "monthly",
+      "notes": "ONS CPI — used for nominal-to-real deflation"
+    }
+  },
+
+  "model": {
+    "sde_type": "ornstein_uhlenbeck",
+    "dt": 0.083333,
+    "n_simulations": 10000,
+    "drift_mu": null,
+    "mean_reversion_theta": null,
+    "diffusion_sigma": null,
+    "long_run_mean": null,
+    "_note": "Null values populated by OLS calibration in Stage 4"
+  },
+
+  "scoring": {
+    "thresholds": {
+      "buy": 65,
+      "hold": 40,
+      "dont_buy": 0
+    },
+    "consumer_weights": {
+      "affordability": 0.40,
+      "price_momentum": 0.25,
+      "cycle_position": 0.20,
+      "rate_environment": 0.15
+    },
+    "reit_weights": {
+      "yield_score": 0.35,
+      "cycle_position": 0.30,
+      "price_momentum": 0.20,
+      "risk_adjusted_return": 0.15
+    }
+  },
+
+  "ui": {
+    "deployment": "streamlit_cloud",
+    "default_region": "London",
+    "scenario_labels": ["Bear", "Base", "Bull"],
+    "scenario_percentiles": [10, 50, 90]
+  }
+}

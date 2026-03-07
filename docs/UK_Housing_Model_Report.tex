@@ -1,0 +1,813 @@
+%% ============================================================
+%%  UK Housing Market Model — Project Report
+%%  A stochastic simulation and scoring model for retail buyers
+%%  and Real Estate Investment Trusts (REITs)
+%%
+%%  Usage: Fill in each \todo{} and results section as you
+%%  complete each stage. Compile with pdflatex or XeLaTeX.
+%%  Run: pdflatex UK_Housing_Model_Report.tex
+%% ============================================================
+
+\documentclass[12pt, a4paper]{report}
+
+%% ── Packages ────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[british]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% Page layout
+\usepackage[
+  top=2.5cm, bottom=2.5cm,
+  left=3cm,  right=2.5cm
+]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+
+% Maths
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{mathtools}
+
+% Tables & figures
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+
+% Code listings
+\usepackage{listings}
+\usepackage{xcolor}
+\definecolor{codegray}{rgb}{0.95,0.95,0.95}
+\definecolor{codegreen}{rgb}{0,0.5,0}
+\definecolor{codepurple}{rgb}{0.4,0,0.6}
+\lstset{
+  backgroundcolor=\color{codegray},
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{codepurple}\bfseries,
+  commentstyle=\color{codegreen}\itshape,
+  stringstyle=\color{red!70!black},
+  numberstyle=\tiny\color{gray},
+  numbers=left,
+  numbersep=8pt,
+  breaklines=true,
+  frame=single,
+  framerule=0.4pt,
+  captionpos=b,
+  tabsize=4,
+  showstringspaces=false,
+  language=Python
+}
+
+% Hyperlinks & cross-references
+\usepackage[
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  citecolor=green!40!black,
+  urlcolor=blue
+]{hyperref}
+\usepackage{cleveref}
+
+% Header / footer
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\small UK Housing Market Model}
+\lhead{\small \leftmark}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% Bibliography
+\usepackage[
+  backend=biber,
+  style=apa,
+  sorting=nyt
+]{biblatex}
+\addbibresource{references.bib}
+
+% Todo notes (remove for final submission)
+\usepackage[colorinlistoftodos, textsize=small]{todonotes}
+\newcommand{\mytodo}[1]{\todo[inline, color=yellow!30]{#1}}
+
+% Theorem environments
+\newtheorem{definition}{Definition}[chapter]
+\newtheorem{proposition}{Proposition}[chapter]
+\newtheorem{remark}{Remark}[chapter]
+
+%% ── Title information ───────────────────────────────────────
+\title{
+  \vspace{-1cm}
+  \includegraphics[width=0.15\textwidth]{docs/logo_placeholder.png} \\[1em]
+  \huge\bfseries UK Housing Market Model \\[0.5em]
+  \Large A Stochastic Simulation and Buy/Hold/Don't Buy \\
+  Scoring Engine for Retail Buyers and REITs \\[1em]
+  \large Project Report
+}
+\author{Basheer Ahmadi}
+\date{\today}
+
+%% ============================================================
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+
+%% ── Abstract ────────────────────────────────────────────────
+\begin{abstract}
+\noindent
+This report documents the full development of the UK Housing Market Model,
+a Python-based quantitative tool that ingests real UK housing market data,
+calibrates a stochastic differential equation (SDE) using Ordinary Least
+Squares (OLS) regression, runs Monte Carlo simulations of future price
+trajectories, and outputs a scored \textit{Buy / Hold / Don't Buy}
+recommendation for two distinct user groups: retail home buyers and
+Real Estate Investment Trusts (REITs).
+
+The project spans approximately 300 hours of development across seven stages:
+environment setup, data acquisition, data cleaning, OLS calibration, SDE
+simulation, scoring engine design, and interactive UI deployment. Each stage
+is documented in this report with the decisions made, the methods applied,
+the code implemented, and the results obtained.
+
+\vspace{0.5em}
+\noindent\textbf{Keywords:} UK housing market, stochastic differential equations,
+Ornstein-Uhlenbeck process, Monte Carlo simulation, OLS calibration,
+affordability scoring, REIT analysis, Streamlit.
+\end{abstract}
+
+\newpage
+\tableofcontents
+\listoffigures
+\listoftables
+\newpage
+
+%% ============================================================
+\chapter{Introduction}
+%% ============================================================
+
+\section{Motivation}
+
+The UK housing market is one of the most consequential financial markets for
+both individual households and institutional investors. Despite its size and
+importance, accessible quantitative tools for evaluating entry timing remain
+scarce for retail buyers, and REIT-grade analytics are typically locked behind
+expensive proprietary platforms.
+
+This project builds an open, transparent model that:
+\begin{itemize}
+  \item Uses publicly available UK data (HM Land Registry, ONS, Bank of England)
+  \item Applies rigorous econometric calibration via OLS regression
+  \item Simulates future price uncertainty using a mean-reverting SDE
+  \item Translates model output into a simple, interpretable score
+  \item Delivers results through an interactive web application
+\end{itemize}
+
+\section{Scope and Limitations}
+
+\mytodo{Fill in after project completion: state what the model covers and
+what it explicitly does not claim to predict.}
+
+The model covers \textbf{12 ONS standard regions} of the UK over the period
+2000--2024. It does not constitute financial advice. Scoring outputs should
+be interpreted as model-based signals, not guarantees of future performance.
+
+\section{Report Structure}
+
+This report follows the seven development stages of the project. Each chapter
+corresponds to one stage, documenting the objective, methodology, implementation
+decisions, and results.
+
+%% ============================================================
+\chapter{Stage 1: Project Architecture \& Environment Setup}
+%% ============================================================
+\textit{Estimated: 10--15 hours \quad Actual: \mytodo{fill in actual hours}}
+
+\section{Objectives}
+
+Stage 1 establishes the project scaffold: folder structure, Python environment,
+configuration files, version control, and data source mapping. No model code
+is written in this stage; the goal is to ensure that every subsequent stage
+builds on a clean, reproducible foundation.
+
+\section{Folder Structure}
+
+The project follows a modular Python package layout separating data, source
+code, configuration, tests, and documentation:
+
+\begin{lstlisting}[caption={Project directory structure}, label={lst:structure}]
+housing_model/
+  config/
+    parameters.json     # Central parameter store
+    data_schema.json    # Data dictionary for all variables
+    settings.py         # Imports params and env variables
+  data/
+    raw/                # Downloaded source files (gitignored)
+    processed/          # Cleaned, merged datasets
+    outputs/            # Model results and charts
+  src/
+    ingestion/          # Stage 2: data download scripts
+    cleaning/           # Stage 3: merge and quality checks
+    model/              # Stage 4: OLS calibration
+    simulation/         # Stage 5: SDE Monte Carlo
+    scoring/            # Stage 6: scoring engine
+    ui/                 # Stage 7: Streamlit application
+  tests/
+  notebooks/
+  docs/
+\end{lstlisting}
+
+\section{Technology Stack}
+
+\begin{table}[H]
+\centering
+\caption{Core dependencies and their roles}
+\label{tab:dependencies}
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+\textbf{Library} & \textbf{Version} & \textbf{Role} \\
+\midrule
+pandas      & $\geq$2.1  & Data manipulation and time series alignment \\
+numpy       & $\geq$1.26 & Numerical computation and Monte Carlo arrays \\
+scipy       & $\geq$1.11 & Statistical distributions and optimisation \\
+statsmodels & $\geq$0.14 & OLS regression and diagnostic tests \\
+matplotlib  & $\geq$3.8  & Static visualisation \\
+plotly      & $\geq$5.18 & Interactive charts in Streamlit \\
+streamlit   & $\geq$1.30 & Interactive web application \\
+geopandas   & $\geq$0.14 & Regional map visualisations \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Configuration Design}
+
+All model parameters, scoring weights, and data source metadata are stored
+in \texttt{config/parameters.json}. This single source of truth means that
+changing a parameter (e.g.\ the number of Monte Carlo paths) propagates
+automatically across all modules. Calibrated OLS parameters from Stage 4
+are written back to this file, replacing the \texttt{null} placeholders.
+
+\section{Version Control}
+
+\mytodo{Fill in: GitHub repo URL, branching strategy used.}
+
+The project is hosted as a private GitHub repository at:
+\url{https://github.com/USERNAME/REITs-Model}. A simple trunk-based workflow
+is used: \texttt{main} holds stable code; each stage is developed on a
+feature branch and merged on completion.
+
+\section{Stage 1 Outcome}
+
+\mytodo{Fill in: any deviations from the planned structure, lessons learned.}
+
+%% ============================================================
+\chapter{Stage 2: Data Acquisition \& Ingestion}
+%% ============================================================
+\textit{Estimated: 30--40 hours \quad Actual: \mytodo{fill in}}
+
+\section{Objectives}
+
+This stage constructs the raw data pipeline. Five primary data sources are
+used, all publicly available:
+
+\begin{enumerate}
+  \item \textbf{HM Land Registry UK HPI} --- monthly average house prices by region
+  \item \textbf{ONS EARN01} --- median weekly earnings by region (quarterly)
+  \item \textbf{Bank of England} --- official base rate (irregular)
+  \item \textbf{ONS MM23} --- Consumer Price Index (monthly)
+  \item \textbf{ONS Population} --- mid-year regional population estimates (annual)
+\end{enumerate}
+
+\section{Data Sources}
+
+\subsection{HM Land Registry}
+
+\mytodo{Fill in: date range downloaded, any access issues, file format notes.}
+
+The UK House Price Index (UK HPI) is published monthly by HM Land Registry
+and covers all residential transactions registered in England and Wales since
+January 1995. The full dataset is available as a CSV download and contains
+average prices, indices, and sales volumes broken down by region and property
+type.
+
+\subsection{ONS Economic Indicators}
+
+\mytodo{Fill in: ONS API authentication method, datasets pulled, any
+rate-limiting issues encountered.}
+
+The ONS API provides programmatic access to all published datasets. The
+income series (EARN01) is published quarterly and must be interpolated to
+monthly frequency for alignment with other series.
+
+\subsection{Bank of England Base Rate}
+
+\mytodo{Fill in: date range, handling of rate change dates.}
+
+The BoE base rate is published on an irregular schedule (changed at MPC
+meetings). For the model it is forward-filled to a monthly series.
+
+\section{Ingestion Pipeline Design}
+
+\mytodo{Fill in: describe the final implementation once Stage 2 code is written.}
+
+Each source has a dedicated ingestion module under \texttt{src/ingestion/}.
+All raw files are saved to \texttt{data/raw/} with a timestamp suffix to
+allow re-downloads without overwriting.
+
+\subsection{Data Volume}
+
+\begin{table}[H]
+\centering
+\caption{Expected raw data volume per source}
+\label{tab:data-volume}
+\begin{tabular}{lllr}
+\toprule
+\textbf{Source} & \textbf{Frequency} & \textbf{Period} & \textbf{Rows (est.)} \\
+\midrule
+Land Registry  & Monthly    & 2000--2024 & $\sim$3,600 \\
+ONS Income     & Quarterly  & 2000--2024 & $\sim$1,200 \\
+BoE Base Rate  & Irregular  & 2000--2024 & $\sim$150   \\
+ONS CPI        & Monthly    & 2000--2024 & $\sim$300   \\
+ONS Population & Annual     & 2000--2024 & $\sim$300   \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Key Decisions Made}
+
+\mytodo{Fill in as you make each decision during Stage 2.}
+
+\begin{itemize}
+  \item \textbf{Geographic granularity:} \mytodo{ONS regions / cities / national?}
+  \item \textbf{Start date:} \mytodo{2000 or earlier?}
+  \item \textbf{Rightmove/Zoopla:} \mytodo{included or excluded?}
+\end{itemize}
+
+\section{Stage 2 Outcome}
+
+\mytodo{Fill in: final row counts, any data gaps found, issues resolved.}
+
+%% ============================================================
+\chapter{Stage 3: Data Cleaning \& Merging}
+%% ============================================================
+\textit{Estimated: 25--35 hours \quad Actual: \mytodo{fill in}}
+
+\section{Objectives}
+
+Raw UK housing data arrives in inconsistent formats: different regional
+codings, mixed nominal and real values, mismatched frequencies, and missing
+observations. This stage produces a single analytical dataset at monthly
+frequency indexed by \texttt{(date, region)}.
+
+\section{Alignment to Monthly Frequency}
+
+Quarterly and annual series are aligned to monthly frequency as follows:
+
+\begin{itemize}
+  \item \textbf{ONS income (quarterly):} cubic spline interpolation
+  \item \textbf{ONS population (annual):} linear interpolation
+  \item \textbf{BoE base rate (irregular):} last-observation-carried-forward (LOCF)
+\end{itemize}
+
+\section{Nominal to Real Conversion}
+
+All price and income series are deflated to real terms using the ONS CPI
+with a base year of \mytodo{confirm base year}:
+
+\begin{equation}
+  P^{\text{real}}_t = P^{\text{nominal}}_t \times \frac{\text{CPI}_{\text{base}}}{\text{CPI}_t}
+  \label{eq:deflation}
+\end{equation}
+
+\section{Derived Variables}
+
+The following variables are engineered from the base series:
+
+\begin{table}[H]
+\centering
+\caption{Derived variables in the master dataset}
+\label{tab:derived}
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+\textbf{Variable} & \textbf{Formula} & \textbf{Economic meaning} \\
+\midrule
+\texttt{price\_income\_ratio}   & $P^{\text{real}} / Y^{\text{real}}$       & Affordability proxy \\
+\texttt{affordability\_index}   & $100 - \text{pctrank}(\text{PIR})$        & Normalised affordability (0--100) \\
+\texttt{d\_log\_price}          & $\Delta \ln P^{\text{real}}_t$            & Monthly real price growth rate \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Data Quality Report}
+
+\mytodo{Insert output of data\_quality\_report() here: missingness table,
+outlier counts, and key time series plots.}
+
+\section{Stage 3 Outcome}
+
+\mytodo{Fill in: final master dataset dimensions, any variables dropped or
+transformed differently than planned.}
+
+%% ============================================================
+\chapter{Stage 4: OLS Calibration}
+%% ============================================================
+\textit{Estimated: 40--50 hours \quad Actual: \mytodo{fill in}}
+
+\section{Objectives}
+
+Ordinary Least Squares regression connects observed historical data to the
+parameters that drive the SDE simulation. This stage produces the empirical
+backbone of the model: estimates of drift, mean reversion, and the relative
+importance of each economic driver.
+
+\section{Regression Specification}
+
+\mytodo{Fill in your chosen specification once decided.}
+
+The baseline regression equation for monthly real house price growth is:
+
+\begin{equation}
+  \Delta \ln P_{r,t} = \alpha + \beta_1 \Delta \ln Y_{r,t} + \beta_2 \Delta r_t
+    + \beta_3 \ln \text{PIR}_{r,t-1} + \beta_4 \Delta \ln N_{r,t} + \varepsilon_{r,t}
+  \label{eq:ols}
+\end{equation}
+
+where $P_{r,t}$ is real house price in region $r$ at time $t$, $Y_{r,t}$ is
+real income, $r_t$ is the BoE base rate, $\text{PIR}_{r,t-1}$ is the lagged
+price-to-income ratio (error correction term), and $N_{r,t}$ is regional
+population.
+
+\section{OLS Results}
+
+\mytodo{Insert statsmodels OLS summary table here once Stage 4 is run.}
+
+\begin{table}[H]
+\centering
+\caption{OLS regression results --- \mytodo{update with actual values}}
+\label{tab:ols}
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Variable} & \textbf{Coefficient} & \textbf{Std.\ Error} & \textbf{t-stat} & \textbf{p-value} \\
+\midrule
+Constant                         & & & & \\
+$\Delta \ln Y_{r,t}$             & & & & \\
+$\Delta r_t$                     & & & & \\
+$\ln \text{PIR}_{r,t-1}$         & & & & \\
+$\Delta \ln N_{r,t}$             & & & & \\
+\midrule
+$R^2$                            & \multicolumn{4}{l}{\mytodo{}} \\
+Adj.\ $R^2$                      & \multicolumn{4}{l}{\mytodo{}} \\
+Durbin-Watson                    & \multicolumn{4}{l}{\mytodo{}} \\
+Observations                     & \multicolumn{4}{l}{\mytodo{}} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Diagnostic Tests}
+
+\mytodo{Fill in diagnostic results: Durbin-Watson, White test for
+heteroskedasticity, VIF for multicollinearity.}
+
+\subsection{Serial Correlation}
+
+The Durbin-Watson statistic of \mytodo{value} suggests \mytodo{interpretation}.
+
+\subsection{Heteroskedasticity}
+
+White's test: $F$-statistic = \mytodo{}, $p$-value = \mytodo{}.
+
+\subsection{Multicollinearity}
+
+Variance Inflation Factors (VIF):
+
+\begin{table}[H]
+\centering
+\caption{VIF values for OLS regressors}
+\label{tab:vif}
+\begin{tabular}{lr}
+\toprule
+\textbf{Variable} & \textbf{VIF} \\
+\midrule
+\mytodo{} & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Calibrated Parameters}
+
+\mytodo{Fill in once OLS is run.}
+
+The following parameters are extracted from the OLS results and written to
+\texttt{config/parameters.json} for use by the SDE simulation:
+
+\begin{align}
+  \mu   &= \mytodo{drift estimate} \label{eq:mu} \\
+  \theta &= \mytodo{mean reversion speed} \label{eq:theta} \\
+  \sigma &= \mytodo{diffusion from residual std dev} \label{eq:sigma}
+\end{align}
+
+\section{Stage 4 Outcome}
+
+\mytodo{Fill in: economic interpretation of coefficients, any
+re-specifications required, final chosen parameter set.}
+
+%% ============================================================
+\chapter{Stage 5: SDE Simulation}
+%% ============================================================
+\textit{Estimated: 50--60 hours \quad Actual: \mytodo{fill in}}
+
+\section{Objectives}
+
+The Stochastic Differential Equation captures the dynamic and uncertain
+nature of UK house prices over time. The simulation generates a distribution
+of future price paths which feeds directly into the scoring engine.
+
+\section{Choice of SDE: Ornstein-Uhlenbeck Process}
+
+\mytodo{Confirm this choice or update if a different process was selected.}
+
+The Ornstein-Uhlenbeck (OU) process was selected for its mean-reverting
+property, which is economically motivated: in the long run, house prices
+cannot diverge indefinitely from fundamental values (income, rent yields).
+The continuous-time SDE is:
+
+\begin{equation}
+  dP_t = \theta(\mu - P_t)\,dt + \sigma\,dW_t
+  \label{eq:ou}
+\end{equation}
+
+where:
+\begin{itemize}
+  \item $\theta > 0$ is the mean reversion speed (rate at which prices return to $\mu$)
+  \item $\mu$ is the long-run equilibrium price level
+  \item $\sigma > 0$ is the diffusion coefficient (price volatility)
+  \item $W_t$ is a standard Brownian motion
+\end{itemize}
+
+\subsection{Comparison with Geometric Brownian Motion}
+
+Geometric Brownian Motion (GBM), the standard Black-Scholes model for equities,
+was considered but rejected because:
+
+\begin{enumerate}
+  \item GBM has no mean reversion --- prices can drift to zero or infinity
+  \item Housing markets exhibit documented cyclicality and affordability constraints
+  \item The OU process has a closed-form stationary distribution:
+        $P_\infty \sim \mathcal{N}\!\left(\mu,\,\frac{\sigma^2}{2\theta}\right)$
+\end{enumerate}
+
+\section{Numerical Discretisation: Euler-Maruyama}
+
+The continuous SDE is discretised using the Euler-Maruyama scheme with a
+monthly time step ($\Delta t = \frac{1}{12}$):
+
+\begin{equation}
+  P_{t+\Delta t} = P_t + \theta(\mu - P_t)\Delta t + \sigma\sqrt{\Delta t}\,Z_t, \quad
+  Z_t \sim \mathcal{N}(0,1)
+  \label{eq:euler}
+\end{equation}
+
+\section{Monte Carlo Simulation}
+
+$N = 10{,}000$ price paths are generated per region per scenario. The
+simulation outputs three summary series used by the scoring engine:
+
+\begin{align}
+  \hat{P}^{(10)}_t &= \text{10th percentile of simulated prices at time } t \\
+  \hat{P}^{(50)}_t &= \text{50th percentile (median)} \\
+  \hat{P}^{(90)}_t &= \text{90th percentile}
+\end{align}
+
+These correspond to the Bear, Base, and Bull scenarios respectively.
+
+\section{Validation Against Historical Data}
+
+\mytodo{Insert back-test plot: simulated fan chart overlaid on actual
+historical prices.}
+
+\mytodo{Fill in: does the simulated distribution appear realistic?
+Are the percentile bands too wide or too narrow?}
+
+\section{Stage 5 Outcome}
+
+\mytodo{Fill in: final parameter values used, any stability issues with
+the discretisation, how many paths were needed for convergence.}
+
+%% ============================================================
+\chapter{Stage 6: Scoring Engine}
+%% ============================================================
+\textit{Estimated: 35--45 hours \quad Actual: \mytodo{fill in}}
+
+\section{Objectives}
+
+The scoring engine transforms the Monte Carlo simulation output into a
+human-readable \textit{Buy / Hold / Don't Buy} recommendation. This is the
+highest-judgment stage of the project: the methodology and thresholds are
+design choices with real consequences for users.
+
+\section{Score Architecture}
+
+Each score is a weighted average of component sub-scores, each normalised
+to a 0--100 scale using the historical distribution of that variable.
+
+\subsection{Consumer Score}
+
+\begin{equation}
+  S^{\text{consumer}} = w_1 A + w_2 M + w_3 C + w_4 R
+  \label{eq:consumer-score}
+\end{equation}
+
+where:
+\begin{itemize}
+  \item $A$ = affordability index (price-to-income, user's income vs region)
+  \item $M$ = price momentum signal from Monte Carlo (upside/downside balance)
+  \item $C$ = cycle position (where current prices sit in the long-run distribution)
+  \item $R$ = rate environment score (mortgage rate affordability)
+\end{itemize}
+
+Default weights: $w_1 = 0.40,\ w_2 = 0.25,\ w_3 = 0.20,\ w_4 = 0.15$
+
+\mytodo{Confirm or update these weights after calibration.}
+
+\subsection{REIT Score}
+
+\begin{equation}
+  S^{\text{REIT}} = w_1 Y + w_2 C + w_3 M + w_4 \text{RAR}
+  \label{eq:reit-score}
+\end{equation}
+
+where $Y$ = gross yield score, $C$ = cycle position, $M$ = price momentum,
+$\text{RAR}$ = risk-adjusted return score.
+
+Default weights: $w_1 = 0.35,\ w_2 = 0.30,\ w_3 = 0.20,\ w_4 = 0.15$
+
+\section{Signal Thresholds}
+
+\begin{table}[H]
+\centering
+\caption{Buy / Hold / Don't Buy thresholds}
+\label{tab:thresholds}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Signal} & \textbf{Score range} & \textbf{Interpretation} \\
+\midrule
+Buy       & $\geq 65$ & Favourable entry conditions \\
+Hold      & $40 - 64$ & Mixed signals, monitor closely \\
+Don't Buy & $< 40$    & Unfavourable conditions \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\mytodo{Back-test these thresholds against historical data: do they
+correctly identify good and bad entry points?}
+
+\section{Score Back-Test Results}
+
+\mytodo{Insert table showing score signals at key historical turning
+points (e.g.\ 2007 peak, 2009 trough, 2022 rate shock).}
+
+\section{Stage 6 Outcome}
+
+\mytodo{Fill in: did the scoring produce sensible signals on historical
+data? Any weights adjusted after back-testing?}
+
+%% ============================================================
+\chapter{Stage 7: Interactive UI \& Deployment}
+%% ============================================================
+\textit{Estimated: 40--50 hours \quad Actual: \mytodo{fill in}}
+
+\section{Objectives}
+
+The final stage delivers the model as an interactive web application
+accessible to both retail buyers and institutional REIT investors.
+
+\section{Deployment Choice}
+
+\mytodo{Confirm deployment platform once Stage 7 is complete.}
+
+After evaluating cost and complexity, the application is deployed on
+\textbf{Streamlit Community Cloud} (free tier). This requires only a
+public or private GitHub repository connected to the Streamlit Cloud
+service --- no server management, no Docker configuration required.
+
+Alternatives evaluated:
+
+\begin{table}[H]
+\centering
+\caption{UI deployment options compared}
+\label{tab:deployment}
+\begin{tabular}{llll}
+\toprule
+\textbf{Platform} & \textbf{Cost} & \textbf{Complexity} & \textbf{Custom domain} \\
+\midrule
+Streamlit Community Cloud & Free             & Low    & Yes (paid) \\
+Render.com                & Free (750 hr/mo) & Medium & Yes        \\
+Railway.app               & \$5 credit/mo    & Medium & Yes        \\
+Hugging Face Spaces       & Free             & Low    & No         \\
+AWS EC2 / ECS             & $\sim$\$10+/mo   & High   & Yes        \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Application Structure}
+
+The Streamlit application (\texttt{src/ui/app.py}) consists of three tabs:
+
+\begin{enumerate}
+  \item \textbf{Consumer View} --- input form (region, income, deposit) $\rightarrow$ score dial,
+        Monte Carlo fan chart, affordability breakdown
+  \item \textbf{REIT View} --- portfolio input $\rightarrow$ yield/cycle score,
+        regional heat map, scenario comparison table
+  \item \textbf{Model Explorer} --- parameter sliders with live Monte Carlo
+        recalculation (transparency and sensitivity analysis)
+\end{enumerate}
+
+\section{Key UI Features}
+
+\mytodo{Add screenshots of the finished application here.}
+
+\begin{itemize}
+  \item Regional choropleth map showing scores across all 12 ONS regions
+  \item Plotly fan chart (Bear / Base / Bull price paths)
+  \item Score dial gauge (0--100) with Buy / Hold / Don't Buy colour coding
+  \item Real-time Monte Carlo recalculation on parameter slider change
+  \item Downloadable CSV of simulation outputs
+\end{itemize}
+
+\section{Stage 7 Outcome}
+
+\mytodo{Fill in: deployment URL, any performance issues, user feedback
+if tested with external users.}
+
+%% ============================================================
+\chapter{Conclusions \& Reflections}
+%% ============================================================
+
+\section{Summary of Deliverables}
+
+\mytodo{Fill in at project completion.}
+
+This project has delivered:
+\begin{enumerate}
+  \item A fully reproducible Python codebase for UK housing market modelling
+  \item An OLS-calibrated Ornstein-Uhlenbeck price simulation
+  \item A dual-view scoring engine for retail buyers and REITs
+  \item A deployed interactive web application
+  \item This technical report documenting all decisions and results
+\end{enumerate}
+
+\section{Model Limitations}
+
+\mytodo{Fill in after completing all stages.}
+
+\begin{itemize}
+  \item The OU process assumes a constant long-run equilibrium --- structural breaks
+        (e.g.\ post-pandemic supply shocks) are not modelled
+  \item OLS coefficients are estimated on historical data and may not generalise
+        to regime changes
+  \item Supply-side dynamics (planning, new builds) are not directly modelled
+  \item \mytodo{add additional limitations discovered during development}
+\end{itemize}
+
+\section{Potential Extensions}
+
+\begin{itemize}
+  \item Regime-switching model to capture boom/bust cycles explicitly
+  \item Integration of Rightmove/Zoopla supply-demand microdata
+  \item Mortgage scenario analysis (fixed vs.\ variable rate comparison)
+  \item Machine learning ensemble as an alternative scoring layer
+\end{itemize}
+
+\section{Reflections on the Development Process}
+
+\mytodo{Fill in at completion: what worked well, what took longer than
+expected, what you would do differently.}
+
+%% ============================================================
+\appendix
+
+\chapter{Data Schema}
+\label{app:schema}
+
+\mytodo{Insert the contents of config/data\_schema.json formatted as a table.}
+
+\chapter{Calibrated Parameters}
+\label{app:params}
+
+\mytodo{Insert the final config/parameters.json after OLS calibration.}
+
+\chapter{Code Listings}
+\label{app:code}
+
+\mytodo{Insert key code listings (OLS calibration, SDE simulation,
+scoring engine) here as the project progresses.}
+
+%% ============================================================
+%% Bibliography
+%% ============================================================
+\printbibliography[heading=bibintoc, title={References}]
+
+\end{document}
