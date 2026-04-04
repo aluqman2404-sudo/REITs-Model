@@ -1,0 +1,360 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[british]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{setspace}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!50!black,
+  urlcolor=blue!50!black
+}
+
+\setstretch{1.12}
+\setlength{\parskip}{0.5em}
+\setlength{\parindent}{0pt}
+\setlength{\headheight}{14pt}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{UK Housing Market Model}
+\rhead{\thepage}
+
+\title{\textbf{UI Section Guide}\\
+\large Stage 7 Streamlit Dashboard}
+\author{Basheer Ahmad}
+\date{Build aligned to repository state as of 2 April 2026}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Purpose of This Document}
+
+This document explains what each section of the Stage 7 Streamlit UI is for,
+who it is intended for, and how each page should be interpreted. It is meant
+to help a marker, supervisor, or bank-style reviewer understand the dashboard
+quickly without having to infer the purpose of each page from the code.
+
+Primary navigation is defined in \texttt{src/ui/app.py}. The sidebar pages are:
+
+\begin{enumerate}[leftmargin=1.5em]
+  \item Research Overview
+  \item Regional Signals
+  \item Region Comparison
+  \item Scenario \& Diagnostics
+  \item Household Explorer
+  \item Methodology
+  \item Technical Controls
+  \item Limitations
+\end{enumerate}
+
+\section{Research Overview}
+
+\textbf{Purpose}: provide the main top-level research read for the UK housing
+market and a single selected region.
+
+\textbf{Audience}: general reviewer, supervisor, bank-style research reviewer,
+or first-time user.
+
+\textbf{What this page contains}:
+\begin{itemize}[leftmargin=1.5em]
+  \item House View Summary;
+  \item Market Snapshot;
+  \item compact validation-status summary;
+  \item Key Housing Signals for the selected region;
+  \item Risk Context via scenarios and simulation calibration;
+  \item optional cross-regional orientation charts;
+  \item coverage and source-detail tables.
+\end{itemize}
+
+\textbf{How to interpret it}:
+\begin{itemize}[leftmargin=1.5em]
+  \item this is the best starting page for understanding the project;
+  \item valuation and downside context should be read before any forecast-like use;
+  \item later descriptive data are shown as context only and are not silently folded back into the calibrated model.
+\end{itemize}
+
+\textbf{What this page is not}:
+\begin{itemize}[leftmargin=1.5em]
+  \item not a trading screen;
+  \item not a real-time market dashboard;
+  \item not a property-specific recommendation tool.
+\end{itemize}
+
+\section{Regional Signals}
+
+\textbf{Purpose}: provide the main analyst-facing regional dashboard for
+institutional-style review of one region at a time.
+
+\textbf{Audience}: research analyst, marker, dissertation reviewer, or
+bank-style model reviewer.
+
+\textbf{What this page contains}:
+\begin{itemize}[leftmargin=1.5em]
+  \item Headline View on valuation, cycle, and downside;
+  \item Supporting Signals with evidence tags;
+  \item Supporting Charts including fan chart, score breakdown, scenario comparison, and yield-versus-risk context;
+  \item research-style commentary in plain language.
+\end{itemize}
+
+\textbf{Core signals shown here}:
+\begin{itemize}[leftmargin=1.5em]
+  \item Valuation: strongest evidence base;
+  \item Cycle: partially supported;
+  \item Downside: scenario and risk context;
+  \item Rent support / yield: contextual rather than fully validated.
+\end{itemize}
+
+\textbf{How to interpret it}:
+\begin{itemize}[leftmargin=1.5em]
+  \item this is the core institutional page;
+  \item the component signals matter more than the blended score;
+  \item a reviewer should focus first on valuation, then downside, then cycle.
+\end{itemize}
+
+\textbf{What this page is not}:
+\begin{itemize}[leftmargin=1.5em]
+  \item not a probability-weighted forecast table;
+  \item not a REIT backtest engine.
+\end{itemize}
+
+\section{Region Comparison}
+
+\textbf{Purpose}: compare a small set of regions over time on the same chart.
+
+\textbf{Audience}: anyone trying to understand regional dispersion rather than
+a single-region case study.
+
+\textbf{User inputs}:
+\begin{itemize}[leftmargin=1.5em]
+  \item up to four regions;
+  \item comparison metric;
+  \item time window.
+\end{itemize}
+
+\textbf{Metrics available}:
+\begin{itemize}[leftmargin=1.5em]
+  \item Nominal House Price Index;
+  \item Real House Price Index;
+  \item Fair Value Gap;
+  \item Downside Probability;
+  \item Rental Yield.
+\end{itemize}
+
+\textbf{How to interpret it}:
+\begin{itemize}[leftmargin=1.5em]
+  \item this page is for relative comparison;
+  \item it is useful for seeing whether London and the regions are moving together or diverging;
+  \item when Fair Value Gap is selected, the page also shows the latest gap and confidence-interval context where available.
+\end{itemize}
+
+\textbf{What this page is not}:
+\begin{itemize}[leftmargin=1.5em]
+  \item not the main decision page;
+  \item not the place to judge overall model validation.
+\end{itemize}
+
+\section{Scenario \& Diagnostics}
+
+\textbf{Purpose}: stress-test a region under alternative macro assumptions and
+inspect the simulation behaviour.
+
+\textbf{Audience}: analyst or technically engaged reviewer.
+
+\textbf{User inputs}:
+\begin{itemize}[leftmargin=1.5em]
+  \item region;
+  \item scenario preset;
+  \item additional rate shock;
+  \item volatility multiplier;
+  \item drift override;
+  \item horizon;
+  \item number of simulation paths.
+\end{itemize}
+
+\textbf{What this page contains}:
+\begin{itemize}[leftmargin=1.5em]
+  \item scenario-specific fair-value and rate assumptions;
+  \item fan chart under the selected stress setup;
+  \item scenario comparison table across presets;
+  \item downloadable scenario-path CSV;
+  \item simulation calibration diagnostics.
+\end{itemize}
+
+\textbf{How to interpret it}:
+\begin{itemize}[leftmargin=1.5em]
+  \item this is a perturbation and stress-testing tool;
+  \item it does not re-estimate the econometric model live;
+  \item it helps answer what happens if the macro path is worse, better, or more volatile than baseline.
+\end{itemize}
+
+\textbf{What this page is not}:
+\begin{itemize}[leftmargin=1.5em]
+  \item not a model retraining page;
+  \item not proof that a given macro scenario is the most likely one.
+\end{itemize}
+
+\section{Household Explorer}
+
+\textbf{Purpose}: translate the research system into an affordability and
+downside view for a household-level example.
+
+\textbf{Audience}: non-technical user, student reviewer, or someone wanting to
+see consumer-side implications.
+
+\textbf{User inputs}:
+\begin{itemize}[leftmargin=1.5em]
+  \item region;
+  \item household income;
+  \item deposit;
+  \item mortgage term;
+  \item target property price;
+  \item risk tolerance;
+  \item macro scenario.
+\end{itemize}
+
+\textbf{What this page contains}:
+\begin{itemize}[leftmargin=1.5em]
+  \item plain-language headline view for the chosen household setup;
+  \item supporting signals for affordability, valuation, cycle, and downside;
+  \item monthly payment and mortgage stress outputs;
+  \item fan chart and scenario comparison;
+  \item key risks and caveats.
+\end{itemize}
+
+\textbf{How to interpret it}:
+\begin{itemize}[leftmargin=1.5em]
+  \item this page is secondary to the core regional research dashboard;
+  \item it is useful for illustrating affordability pressure and downside exposure;
+  \item it should not be used as mortgage advice or as a buy / do-not-buy decision engine.
+\end{itemize}
+
+\textbf{What this page is not}:
+\begin{itemize}[leftmargin=1.5em]
+  \item not financial advice;
+  \item not lender underwriting.
+\end{itemize}
+
+\section{Methodology}
+
+\textbf{Purpose}: explain how the model works, what data it uses, and what the
+current validation position is.
+
+\textbf{Audience}: marker, technical reviewer, supervisor, or model-risk
+reviewer.
+
+\textbf{What this page contains}:
+\begin{itemize}[leftmargin=1.5em]
+  \item high-level explanation of the pipeline design;
+  \item the distinction between model-panel data and descriptive data;
+  \item current validation status;
+  \item structural stability tests;
+  \item signal backtest summaries;
+  \item links to wider project documentation;
+  \item glossary of terms.
+\end{itemize}
+
+\textbf{How to interpret it}:
+\begin{itemize}[leftmargin=1.5em]
+  \item this is the main ``how it works'' page;
+  \item it should be read together with the Limitations page;
+  \item it is the best page for defending the project academically or institutionally.
+\end{itemize}
+
+\section{Technical Controls}
+
+\textbf{Purpose}: expose calibrated parameters and override guardrails without
+allowing users to change the core model calibration.
+
+\textbf{Audience}: technical reviewer or analyst.
+
+\textbf{What this page contains}:
+\begin{itemize}[leftmargin=1.5em]
+  \item region-level calibrated parameters such as \texttt{kappa}, \texttt{sigma}, \texttt{mu\_equilibrium}, \texttt{P\_star\_now}, and \texttt{gamma\_annual};
+  \item interactive guardrails for scenario overrides;
+  \item glossary-backed parameter explanations.
+\end{itemize}
+
+\textbf{How to interpret it}:
+\begin{itemize}[leftmargin=1.5em]
+  \item this page improves transparency and auditability;
+  \item it shows what the model is actually using under the hood;
+  \item the values are read-only and are not meant to be hand-tuned here.
+\end{itemize}
+
+\textbf{What this page is not}:
+\begin{itemize}[leftmargin=1.5em]
+  \item not a calibration editor;
+  \item not a research notebook.
+\end{itemize}
+
+\section{Limitations}
+
+\textbf{Purpose}: state the model risks, validation weaknesses, and practical
+constraints explicitly.
+
+\textbf{Audience}: everyone. This page is mandatory reading before serious use.
+
+\textbf{What this page contains}:
+\begin{itemize}[leftmargin=1.5em]
+  \item 4 material risks;
+  \item 10 significant limitations;
+  \item 8 technical notes;
+  \item data-currency warning based on \texttt{effective\_data\_as\_of}.
+\end{itemize}
+
+\textbf{Key themes covered}:
+\begin{itemize}[leftmargin=1.5em]
+  \item publication lag and stale-data risk;
+  \item uneven source coverage;
+  \item holdout validation weakness versus zero-growth;
+  \item regional calibration issues;
+  \item descriptive versus validated signal boundaries;
+  \item structural break and simulation limitations.
+\end{itemize}
+
+\textbf{How to interpret it}:
+\begin{itemize}[leftmargin=1.5em]
+  \item this page defines the safe boundary of the project;
+  \item if the Methodology page explains how the system works, this page explains where it can fail.
+\end{itemize}
+
+\section{Recommended Reading Order}
+
+\textbf{For a first-time reviewer}:
+\begin{enumerate}[leftmargin=1.5em]
+  \item Research Overview
+  \item Regional Signals
+  \item Methodology
+  \item Limitations
+  \item Scenario \& Diagnostics
+\end{enumerate}
+
+\textbf{For a bank-style or dissertation-style assessment}:
+\begin{enumerate}[leftmargin=1.5em]
+  \item Methodology
+  \item Limitations
+  \item Research Overview
+  \item Regional Signals
+  \item Technical Controls
+\end{enumerate}
+
+\section{One-Sentence Summary}
+
+The UI is structured so that the user starts with a high-level regional housing
+research view, drills into region-level signals and scenarios, and then uses
+the Methodology and Limitations pages to understand exactly how much weight the
+outputs should carry.
+
+\end{document}

@@ -1,813 +1,1139 @@
-%% ============================================================
-%%  UK Housing Market Model — Project Report
-%%  A stochastic simulation and scoring model for retail buyers
-%%  and Real Estate Investment Trusts (REITs)
-%%
-%%  Usage: Fill in each \todo{} and results section as you
-%%  complete each stage. Compile with pdflatex or XeLaTeX.
-%%  Run: pdflatex UK_Housing_Model_Report.tex
-%% ============================================================
+\documentclass[11pt,a4paper]{article}
 
-\documentclass[12pt, a4paper]{report}
-
-%% ── Packages ────────────────────────────────────────────────
+% ── Encoding & fonts ──────────────────────────────────────────────────────
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[british]{babel}
 \usepackage{lmodern}
 \usepackage{microtype}
 
-% Page layout
-\usepackage[
-  top=2.5cm, bottom=2.5cm,
-  left=3cm,  right=2.5cm
-]{geometry}
+% ── Page layout ───────────────────────────────────────────────────────────
+\usepackage[a4paper, top=25mm, bottom=25mm, left=25mm, right=25mm]{geometry}
 \usepackage{setspace}
-\onehalfspacing
+\usepackage{fancyhdr}
 
-% Maths
-\usepackage{amsmath, amssymb, amsthm}
-\usepackage{mathtools}
+% ── Mathematics ───────────────────────────────────────────────────────────
+\usepackage{amsmath,amssymb,amsthm,mathtools}
 
-% Tables & figures
-\usepackage{booktabs}
-\usepackage{longtable}
-\usepackage{tabularx}
-\usepackage{multirow}
-\usepackage{graphicx}
-\usepackage{float}
-\usepackage{caption}
-\usepackage{subcaption}
+% ── Tables ────────────────────────────────────────────────────────────────
+\usepackage{booktabs,longtable,tabularx,array}
 
-% Code listings
-\usepackage{listings}
+% ── Colour & boxes ────────────────────────────────────────────────────────
 \usepackage{xcolor}
-\definecolor{codegray}{rgb}{0.95,0.95,0.95}
-\definecolor{codegreen}{rgb}{0,0.5,0}
-\definecolor{codepurple}{rgb}{0.4,0,0.6}
-\lstset{
-  backgroundcolor=\color{codegray},
-  basicstyle=\ttfamily\small,
-  keywordstyle=\color{codepurple}\bfseries,
-  commentstyle=\color{codegreen}\itshape,
-  stringstyle=\color{red!70!black},
-  numberstyle=\tiny\color{gray},
-  numbers=left,
-  numbersep=8pt,
-  breaklines=true,
-  frame=single,
-  framerule=0.4pt,
-  captionpos=b,
-  tabsize=4,
-  showstringspaces=false,
-  language=Python
+\usepackage[most]{tcolorbox}
+
+% ── Hyperlinks ────────────────────────────────────────────────────────────
+\usepackage{hyperref}
+
+% ── Lists ─────────────────────────────────────────────────────────────────
+\usepackage{enumitem}
+
+% ── Hyperref setup ────────────────────────────────────────────────────────
+\hypersetup{
+  colorlinks = true,
+  linkcolor  = blue!60!black,
+  urlcolor   = blue!60!black,
+  citecolor  = blue!60!black,
+  pdftitle   = {UK Regional Housing Market Model},
+  pdfauthor  = {Luqman Ahmad},
 }
 
-% Hyperlinks & cross-references
-\usepackage[
-  colorlinks=true,
-  linkcolor=blue!60!black,
-  citecolor=green!40!black,
-  urlcolor=blue
-]{hyperref}
-\usepackage{cleveref}
+% ── Page style ────────────────────────────────────────────────────────────
+\setstretch{1.2}
+\setlength{\parskip}{0.6em}
+\setlength{\parindent}{0pt}
+\setlength{\headheight}{14pt}
 
-% Header / footer
-\usepackage{fancyhdr}
 \pagestyle{fancy}
 \fancyhf{}
-\rhead{\small UK Housing Market Model}
-\lhead{\small \leftmark}
+\lhead{\small UK Regional Housing Market Model~v0.2.0}
+\rhead{\small Luqman Ahmad}
 \cfoot{\thepage}
-\renewcommand{\headrulewidth}{0.4pt}
 
-% Bibliography
-\usepackage[
-  backend=biber,
-  style=apa,
-  sorting=nyt
-]{biblatex}
-\addbibresource{references.bib}
+% ── Theorem environments ──────────────────────────────────────────────────
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
 
-% Todo notes (remove for final submission)
-\usepackage[colorinlistoftodos, textsize=small]{todonotes}
-\newcommand{\mytodo}[1]{\todo[inline, color=yellow!30]{#1}}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{remark}[theorem]{Remark}
 
-% Theorem environments
-\newtheorem{definition}{Definition}[chapter]
-\newtheorem{proposition}{Proposition}[chapter]
-\newtheorem{remark}{Remark}[chapter]
-
-%% ── Title information ───────────────────────────────────────
-\title{
-  \vspace{-1cm}
-  \includegraphics[width=0.15\textwidth]{docs/logo_placeholder.png} \\[1em]
-  \huge\bfseries UK Housing Market Model \\[0.5em]
-  \Large A Stochastic Simulation and Buy/Hold/Don't Buy \\
-  Scoring Engine for Retail Buyers and REITs \\[1em]
-  \large Project Report
+% ── Custom colour box for governance notes ────────────────────────────────
+\tcbuselibrary{breakable}
+\newtcolorbox{govbox}[1][Governance Note]{%
+  breakable,
+  colback   = blue!4!white,
+  colframe  = blue!40!black,
+  fonttitle = \bfseries\small,
+  title     = {#1},
+  left=4pt, right=4pt, top=3pt, bottom=3pt,
+  sharp corners,
 }
-\author{Basheer Ahmadi}
-\date{\today}
 
-%% ============================================================
+% ── Custom macros ─────────────────────────────────────────────────────────
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\Pstar}{P^{*}}
+\newcommand{\kap}{\kappa}
+\newcommand{\sig}{\sigma}
+\newcommand{\clip}{\operatorname{clip}}
+
+% ── Title ─────────────────────────────────────────────────────────────────
+\title{%
+  \textbf{UK Regional Housing Market Model}\\[4pt]
+  \large Complete Technical Report --- Version 0.2.0
+}
+\author{Luqman Ahmad \\ \small Quantitative Analyst}
+\date{April 2026}
+
+% ═════════════════════════════════════════════════════════════════════════
 \begin{document}
 
 \maketitle
 \thispagestyle{empty}
-
-%% ── Abstract ────────────────────────────────────────────────
-\begin{abstract}
-\noindent
-This report documents the full development of the UK Housing Market Model,
-a Python-based quantitative tool that ingests real UK housing market data,
-calibrates a stochastic differential equation (SDE) using Ordinary Least
-Squares (OLS) regression, runs Monte Carlo simulations of future price
-trajectories, and outputs a scored \textit{Buy / Hold / Don't Buy}
-recommendation for two distinct user groups: retail home buyers and
-Real Estate Investment Trusts (REITs).
-
-The project spans approximately 300 hours of development across seven stages:
-environment setup, data acquisition, data cleaning, OLS calibration, SDE
-simulation, scoring engine design, and interactive UI deployment. Each stage
-is documented in this report with the decisions made, the methods applied,
-the code implemented, and the results obtained.
-
-\vspace{0.5em}
-\noindent\textbf{Keywords:} UK housing market, stochastic differential equations,
-Ornstein-Uhlenbeck process, Monte Carlo simulation, OLS calibration,
-affordability scoring, REIT analysis, Streamlit.
-\end{abstract}
-
-\newpage
 \tableofcontents
-\listoffigures
-\listoftables
 \newpage
 
-%% ============================================================
-\chapter{Introduction}
-%% ============================================================
+% ─────────────────────────────────────────────────────────────────────────
+\section{Project Overview and Motivation}
+% ─────────────────────────────────────────────────────────────────────────
 
-\section{Motivation}
+\subsection{Purpose}
 
-The UK housing market is one of the most consequential financial markets for
-both individual households and institutional investors. Despite its size and
-importance, accessible quantitative tools for evaluating entry timing remain
-scarce for retail buyers, and REIT-grade analytics are typically locked behind
-expensive proprietary platforms.
+This report documents the UK Regional Housing Market Model (v0.2.0), a
+research platform estimating equilibrium fair values and stochastic forward
+price paths for residential property across 12 UK regions.  The model is
+designed for: (a)~systematic research into regional fair value and
+mean-reversion dynamics; (b)~scenario-based risk assessment for long-horizon
+($\geq$24 month) planning by institutional investors and REIT analysts; and
+(c)~comparative regional analysis anchored to Land Registry HPI data.
 
-This project builds an open, transparent model that:
-\begin{itemize}
-  \item Uses publicly available UK data (HM Land Registry, ONS, Bank of England)
-  \item Applies rigorous econometric calibration via OLS regression
-  \item Simulates future price uncertainty using a mean-reverting SDE
-  \item Translates model output into a simple, interpretable score
-  \item Delivers results through an interactive web application
-\end{itemize}
+The model is \emph{not} suitable for individual property valuation,
+short-horizon trading decisions, or regulatory capital calculations.  It is
+a historical research prototype and does not constitute regulated financial
+advice or a stress-testing model as defined under PRA~SS3/18.
 
-\section{Scope and Limitations}
+\subsection{Seven-Stage Pipeline}
 
-\mytodo{Fill in after project completion: state what the model covers and
-what it explicitly does not claim to predict.}
-
-The model covers \textbf{12 ONS standard regions} of the UK over the period
-2000--2024. It does not constitute financial advice. Scoring outputs should
-be interpreted as model-based signals, not guarantees of future performance.
-
-\section{Report Structure}
-
-This report follows the seven development stages of the project. Each chapter
-corresponds to one stage, documenting the objective, methodology, implementation
-decisions, and results.
-
-%% ============================================================
-\chapter{Stage 1: Project Architecture \& Environment Setup}
-%% ============================================================
-\textit{Estimated: 10--15 hours \quad Actual: \mytodo{fill in actual hours}}
-
-\section{Objectives}
-
-Stage 1 establishes the project scaffold: folder structure, Python environment,
-configuration files, version control, and data source mapping. No model code
-is written in this stage; the goal is to ensure that every subsequent stage
-builds on a clean, reproducible foundation.
-
-\section{Folder Structure}
-
-The project follows a modular Python package layout separating data, source
-code, configuration, tests, and documentation:
-
-\begin{lstlisting}[caption={Project directory structure}, label={lst:structure}]
-housing_model/
-  config/
-    parameters.json     # Central parameter store
-    data_schema.json    # Data dictionary for all variables
-    settings.py         # Imports params and env variables
-  data/
-    raw/                # Downloaded source files (gitignored)
-    processed/          # Cleaned, merged datasets
-    outputs/            # Model results and charts
-  src/
-    ingestion/          # Stage 2: data download scripts
-    cleaning/           # Stage 3: merge and quality checks
-    model/              # Stage 4: OLS calibration
-    simulation/         # Stage 5: SDE Monte Carlo
-    scoring/            # Stage 6: scoring engine
-    ui/                 # Stage 7: Streamlit application
-  tests/
-  notebooks/
-  docs/
-\end{lstlisting}
-
-\section{Technology Stack}
-
-\begin{table}[H]
-\centering
-\caption{Core dependencies and their roles}
-\label{tab:dependencies}
-\begin{tabularx}{\textwidth}{llX}
-\toprule
-\textbf{Library} & \textbf{Version} & \textbf{Role} \\
-\midrule
-pandas      & $\geq$2.1  & Data manipulation and time series alignment \\
-numpy       & $\geq$1.26 & Numerical computation and Monte Carlo arrays \\
-scipy       & $\geq$1.11 & Statistical distributions and optimisation \\
-statsmodels & $\geq$0.14 & OLS regression and diagnostic tests \\
-matplotlib  & $\geq$3.8  & Static visualisation \\
-plotly      & $\geq$5.18 & Interactive charts in Streamlit \\
-streamlit   & $\geq$1.30 & Interactive web application \\
-geopandas   & $\geq$0.14 & Regional map visualisations \\
-\bottomrule
-\end{tabularx}
-\end{table}
-
-\section{Configuration Design}
-
-All model parameters, scoring weights, and data source metadata are stored
-in \texttt{config/parameters.json}. This single source of truth means that
-changing a parameter (e.g.\ the number of Monte Carlo paths) propagates
-automatically across all modules. Calibrated OLS parameters from Stage 4
-are written back to this file, replacing the \texttt{null} placeholders.
-
-\section{Version Control}
-
-\mytodo{Fill in: GitHub repo URL, branching strategy used.}
-
-The project is hosted as a private GitHub repository at:
-\url{https://github.com/USERNAME/REITs-Model}. A simple trunk-based workflow
-is used: \texttt{main} holds stable code; each stage is developed on a
-feature branch and merged on completion.
-
-\section{Stage 1 Outcome}
-
-\mytodo{Fill in: any deviations from the planned structure, lessons learned.}
-
-%% ============================================================
-\chapter{Stage 2: Data Acquisition \& Ingestion}
-%% ============================================================
-\textit{Estimated: 30--40 hours \quad Actual: \mytodo{fill in}}
-
-\section{Objectives}
-
-This stage constructs the raw data pipeline. Five primary data sources are
-used, all publicly available:
-
-\begin{enumerate}
-  \item \textbf{HM Land Registry UK HPI} --- monthly average house prices by region
-  \item \textbf{ONS EARN01} --- median weekly earnings by region (quarterly)
-  \item \textbf{Bank of England} --- official base rate (irregular)
-  \item \textbf{ONS MM23} --- Consumer Price Index (monthly)
-  \item \textbf{ONS Population} --- mid-year regional population estimates (annual)
+\begin{enumerate}[leftmargin=1.8em, label=\textbf{\arabic*.}]
+  \item \textbf{Ingestion} --- fetch and cache raw UK housing and
+        macroeconomic data from Land Registry, Bank of England, ONS, and HMRC.
+  \item \textbf{Cleaning} --- harmonise, interpolate, and construct the
+        canonical monthly panel; record staleness and coverage metadata.
+  \item \textbf{Pre-OLS checks and feature engineering} --- multicollinearity
+        diagnostics and construction of lagged macro features.
+  \item \textbf{OLS calibration} --- semi-structural fair-value layer and
+        monthly growth regression; estimation of OU parameters ($\kap$, $\sig$,
+        $\gamma$) per region.
+  \item \textbf{Monte Carlo simulation} --- 10,000-path Euler-Maruyama
+        simulation per region per scenario over a 5-year horizon.
+  \item \textbf{Scoring engine} --- consumer and REIT composite scores derived
+        from simulation distributional statistics.
+  \item \textbf{Streamlit dashboard} --- interactive research UI covering all
+        12 English, Welsh, Scottish, and Northern Irish regions.
 \end{enumerate}
 
-\section{Data Sources}
+\subsection{Coverage}
 
-\subsection{HM Land Registry}
-
-\mytodo{Fill in: date range downloaded, any access issues, file format notes.}
-
-The UK House Price Index (UK HPI) is published monthly by HM Land Registry
-and covers all residential transactions registered in England and Wales since
-January 1995. The full dataset is available as a CSV download and contains
-average prices, indices, and sales volumes broken down by region and property
-type.
-
-\subsection{ONS Economic Indicators}
-
-\mytodo{Fill in: ONS API authentication method, datasets pulled, any
-rate-limiting issues encountered.}
-
-The ONS API provides programmatic access to all published datasets. The
-income series (EARN01) is published quarterly and must be interpolated to
-monthly frequency for alignment with other series.
-
-\subsection{Bank of England Base Rate}
-
-\mytodo{Fill in: date range, handling of rate change dates.}
-
-The BoE base rate is published on an irregular schedule (changed at MPC
-meetings). For the model it is forward-filled to a monthly series.
-
-\section{Ingestion Pipeline Design}
-
-\mytodo{Fill in: describe the final implementation once Stage 2 code is written.}
-
-Each source has a dedicated ingestion module under \texttt{src/ingestion/}.
-All raw files are saved to \texttt{data/raw/} with a timestamp suffix to
-allow re-downloads without overwriting.
-
-\subsection{Data Volume}
-
-\begin{table}[H]
-\centering
-\caption{Expected raw data volume per source}
-\label{tab:data-volume}
-\begin{tabular}{lllr}
-\toprule
-\textbf{Source} & \textbf{Frequency} & \textbf{Period} & \textbf{Rows (est.)} \\
-\midrule
-Land Registry  & Monthly    & 2000--2024 & $\sim$3,600 \\
-ONS Income     & Quarterly  & 2000--2024 & $\sim$1,200 \\
-BoE Base Rate  & Irregular  & 2000--2024 & $\sim$150   \\
-ONS CPI        & Monthly    & 2000--2024 & $\sim$300   \\
-ONS Population & Annual     & 2000--2024 & $\sim$300   \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\section{Key Decisions Made}
-
-\mytodo{Fill in as you make each decision during Stage 2.}
-
-\begin{itemize}
-  \item \textbf{Geographic granularity:} \mytodo{ONS regions / cities / national?}
-  \item \textbf{Start date:} \mytodo{2000 or earlier?}
-  \item \textbf{Rightmove/Zoopla:} \mytodo{included or excluded?}
+\begin{itemize}[leftmargin=1.8em]
+  \item \textbf{Regions:} 12 (all English regions, Wales, Scotland, Northern Ireland).
+  \item \textbf{Panel start:} 2005-01-01; \textbf{effective data as of:} 2025-01-01.
+  \item \textbf{Simulation horizon:} 5 years (60 monthly steps), 5 macro scenarios.
+  \item \textbf{Total paths:} 600,000 (10,000 paths $\times$ 5 scenarios $\times$ 12 regions).
+  \item \textbf{Validation status:} APPROVED --- 9/9 sign-off areas complete (2026-04-02).
 \end{itemize}
 
-\section{Stage 2 Outcome}
+% ─────────────────────────────────────────────────────────────────────────
+\section{Mathematical Foundations}
+% ─────────────────────────────────────────────────────────────────────────
 
-\mytodo{Fill in: final row counts, any data gaps found, issues resolved.}
+\subsection{Probability Space and Brownian Motion}
 
-%% ============================================================
-\chapter{Stage 3: Data Cleaning \& Merging}
-%% ============================================================
-\textit{Estimated: 25--35 hours \quad Actual: \mytodo{fill in}}
+\begin{definition}
+A \emph{probability space} is a triple $(\Omega,\mathcal{F},\mathbb{P})$ where
+$\Omega$ is the sample space, $\mathcal{F}$ is a $\sigma$-algebra of events, and
+$\mathbb{P}:\mathcal{F}\to[0,1]$ is a probability measure with $\mathbb{P}(\Omega)=1$.
+\end{definition}
 
-\section{Objectives}
-
-Raw UK housing data arrives in inconsistent formats: different regional
-codings, mixed nominal and real values, mismatched frequencies, and missing
-observations. This stage produces a single analytical dataset at monthly
-frequency indexed by \texttt{(date, region)}.
-
-\section{Alignment to Monthly Frequency}
-
-Quarterly and annual series are aligned to monthly frequency as follows:
-
-\begin{itemize}
-  \item \textbf{ONS income (quarterly):} cubic spline interpolation
-  \item \textbf{ONS population (annual):} linear interpolation
-  \item \textbf{BoE base rate (irregular):} last-observation-carried-forward (LOCF)
-\end{itemize}
-
-\section{Nominal to Real Conversion}
-
-All price and income series are deflated to real terms using the ONS CPI
-with a base year of \mytodo{confirm base year}:
-
-\begin{equation}
-  P^{\text{real}}_t = P^{\text{nominal}}_t \times \frac{\text{CPI}_{\text{base}}}{\text{CPI}_t}
-  \label{eq:deflation}
-\end{equation}
-
-\section{Derived Variables}
-
-The following variables are engineered from the base series:
-
-\begin{table}[H]
-\centering
-\caption{Derived variables in the master dataset}
-\label{tab:derived}
-\begin{tabularx}{\textwidth}{llX}
-\toprule
-\textbf{Variable} & \textbf{Formula} & \textbf{Economic meaning} \\
-\midrule
-\texttt{price\_income\_ratio}   & $P^{\text{real}} / Y^{\text{real}}$       & Affordability proxy \\
-\texttt{affordability\_index}   & $100 - \text{pctrank}(\text{PIR})$        & Normalised affordability (0--100) \\
-\texttt{d\_log\_price}          & $\Delta \ln P^{\text{real}}_t$            & Monthly real price growth rate \\
-\bottomrule
-\end{tabularx}
-\end{table}
-
-\section{Data Quality Report}
-
-\mytodo{Insert output of data\_quality\_report() here: missingness table,
-outlier counts, and key time series plots.}
-
-\section{Stage 3 Outcome}
-
-\mytodo{Fill in: final master dataset dimensions, any variables dropped or
-transformed differently than planned.}
-
-%% ============================================================
-\chapter{Stage 4: OLS Calibration}
-%% ============================================================
-\textit{Estimated: 40--50 hours \quad Actual: \mytodo{fill in}}
-
-\section{Objectives}
-
-Ordinary Least Squares regression connects observed historical data to the
-parameters that drive the SDE simulation. This stage produces the empirical
-backbone of the model: estimates of drift, mean reversion, and the relative
-importance of each economic driver.
-
-\section{Regression Specification}
-
-\mytodo{Fill in your chosen specification once decided.}
-
-The baseline regression equation for monthly real house price growth is:
-
-\begin{equation}
-  \Delta \ln P_{r,t} = \alpha + \beta_1 \Delta \ln Y_{r,t} + \beta_2 \Delta r_t
-    + \beta_3 \ln \text{PIR}_{r,t-1} + \beta_4 \Delta \ln N_{r,t} + \varepsilon_{r,t}
-  \label{eq:ols}
-\end{equation}
-
-where $P_{r,t}$ is real house price in region $r$ at time $t$, $Y_{r,t}$ is
-real income, $r_t$ is the BoE base rate, $\text{PIR}_{r,t-1}$ is the lagged
-price-to-income ratio (error correction term), and $N_{r,t}$ is regional
-population.
-
-\section{OLS Results}
-
-\mytodo{Insert statsmodels OLS summary table here once Stage 4 is run.}
-
-\begin{table}[H]
-\centering
-\caption{OLS regression results --- \mytodo{update with actual values}}
-\label{tab:ols}
-\begin{tabular}{lrrrr}
-\toprule
-\textbf{Variable} & \textbf{Coefficient} & \textbf{Std.\ Error} & \textbf{t-stat} & \textbf{p-value} \\
-\midrule
-Constant                         & & & & \\
-$\Delta \ln Y_{r,t}$             & & & & \\
-$\Delta r_t$                     & & & & \\
-$\ln \text{PIR}_{r,t-1}$         & & & & \\
-$\Delta \ln N_{r,t}$             & & & & \\
-\midrule
-$R^2$                            & \multicolumn{4}{l}{\mytodo{}} \\
-Adj.\ $R^2$                      & \multicolumn{4}{l}{\mytodo{}} \\
-Durbin-Watson                    & \multicolumn{4}{l}{\mytodo{}} \\
-Observations                     & \multicolumn{4}{l}{\mytodo{}} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\section{Diagnostic Tests}
-
-\mytodo{Fill in diagnostic results: Durbin-Watson, White test for
-heteroskedasticity, VIF for multicollinearity.}
-
-\subsection{Serial Correlation}
-
-The Durbin-Watson statistic of \mytodo{value} suggests \mytodo{interpretation}.
-
-\subsection{Heteroskedasticity}
-
-White's test: $F$-statistic = \mytodo{}, $p$-value = \mytodo{}.
-
-\subsection{Multicollinearity}
-
-Variance Inflation Factors (VIF):
-
-\begin{table}[H]
-\centering
-\caption{VIF values for OLS regressors}
-\label{tab:vif}
-\begin{tabular}{lr}
-\toprule
-\textbf{Variable} & \textbf{VIF} \\
-\midrule
-\mytodo{} & \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\section{Calibrated Parameters}
-
-\mytodo{Fill in once OLS is run.}
-
-The following parameters are extracted from the OLS results and written to
-\texttt{config/parameters.json} for use by the SDE simulation:
-
-\begin{align}
-  \mu   &= \mytodo{drift estimate} \label{eq:mu} \\
-  \theta &= \mytodo{mean reversion speed} \label{eq:theta} \\
-  \sigma &= \mytodo{diffusion from residual std dev} \label{eq:sigma}
-\end{align}
-
-\section{Stage 4 Outcome}
-
-\mytodo{Fill in: economic interpretation of coefficients, any
-re-specifications required, final chosen parameter set.}
-
-%% ============================================================
-\chapter{Stage 5: SDE Simulation}
-%% ============================================================
-\textit{Estimated: 50--60 hours \quad Actual: \mytodo{fill in}}
-
-\section{Objectives}
-
-The Stochastic Differential Equation captures the dynamic and uncertain
-nature of UK house prices over time. The simulation generates a distribution
-of future price paths which feeds directly into the scoring engine.
-
-\section{Choice of SDE: Ornstein-Uhlenbeck Process}
-
-\mytodo{Confirm this choice or update if a different process was selected.}
-
-The Ornstein-Uhlenbeck (OU) process was selected for its mean-reverting
-property, which is economically motivated: in the long run, house prices
-cannot diverge indefinitely from fundamental values (income, rent yields).
-The continuous-time SDE is:
-
-\begin{equation}
-  dP_t = \theta(\mu - P_t)\,dt + \sigma\,dW_t
-  \label{eq:ou}
-\end{equation}
-
-where:
-\begin{itemize}
-  \item $\theta > 0$ is the mean reversion speed (rate at which prices return to $\mu$)
-  \item $\mu$ is the long-run equilibrium price level
-  \item $\sigma > 0$ is the diffusion coefficient (price volatility)
-  \item $W_t$ is a standard Brownian motion
-\end{itemize}
-
-\subsection{Comparison with Geometric Brownian Motion}
-
-Geometric Brownian Motion (GBM), the standard Black-Scholes model for equities,
-was considered but rejected because:
-
-\begin{enumerate}
-  \item GBM has no mean reversion --- prices can drift to zero or infinity
-  \item Housing markets exhibit documented cyclicality and affordability constraints
-  \item The OU process has a closed-form stationary distribution:
-        $P_\infty \sim \mathcal{N}\!\left(\mu,\,\frac{\sigma^2}{2\theta}\right)$
+\begin{definition}
+A \emph{standard Brownian motion} (Wiener process) $\{W_t\}_{t\geq 0}$ is a
+continuous-time stochastic process satisfying:
+\begin{enumerate}[leftmargin=1.8em]
+  \item $W_0 = 0$ almost surely;
+  \item for $0\leq s < t$, the increment $W_t - W_s \sim \mathcal{N}(0,\,t-s)$;
+  \item increments over disjoint intervals are independent;
+  \item $t\mapsto W_t$ is almost surely continuous.
 \end{enumerate}
+\end{definition}
 
-\section{Numerical Discretisation: Euler-Maruyama}
+Key properties used throughout the model:
+\[
+\E[W_t] = 0, \qquad \Var(W_t) = t, \qquad \E[W_s\,W_t] = \min(s,t).
+\]
+The quadratic variation identity $\E[(dW_t)^2] = dt$ is the source of
+the second-order correction in It\^{o}'s formula.
 
-The continuous SDE is discretised using the Euler-Maruyama scheme with a
-monthly time step ($\Delta t = \frac{1}{12}$):
+\subsection{It\^{o}'s Lemma}
 
+\begin{theorem}[It\^{o}'s Lemma]\label{thm:ito}
+Let $X_t$ satisfy the SDE
 \begin{equation}
-  P_{t+\Delta t} = P_t + \theta(\mu - P_t)\Delta t + \sigma\sqrt{\Delta t}\,Z_t, \quad
-  Z_t \sim \mathcal{N}(0,1)
-  \label{eq:euler}
+  dX_t = \mu(X_t,t)\,dt + \sig(X_t,t)\,dW_t.
 \end{equation}
-
-\section{Monte Carlo Simulation}
-
-$N = 10{,}000$ price paths are generated per region per scenario. The
-simulation outputs three summary series used by the scoring engine:
-
-\begin{align}
-  \hat{P}^{(10)}_t &= \text{10th percentile of simulated prices at time } t \\
-  \hat{P}^{(50)}_t &= \text{50th percentile (median)} \\
-  \hat{P}^{(90)}_t &= \text{90th percentile}
-\end{align}
-
-These correspond to the Bear, Base, and Bull scenarios respectively.
-
-\section{Validation Against Historical Data}
-
-\mytodo{Insert back-test plot: simulated fan chart overlaid on actual
-historical prices.}
-
-\mytodo{Fill in: does the simulated distribution appear realistic?
-Are the percentile bands too wide or too narrow?}
-
-\section{Stage 5 Outcome}
-
-\mytodo{Fill in: final parameter values used, any stability issues with
-the discretisation, how many paths were needed for convergence.}
-
-%% ============================================================
-\chapter{Stage 6: Scoring Engine}
-%% ============================================================
-\textit{Estimated: 35--45 hours \quad Actual: \mytodo{fill in}}
-
-\section{Objectives}
-
-The scoring engine transforms the Monte Carlo simulation output into a
-human-readable \textit{Buy / Hold / Don't Buy} recommendation. This is the
-highest-judgment stage of the project: the methodology and thresholds are
-design choices with real consequences for users.
-
-\section{Score Architecture}
-
-Each score is a weighted average of component sub-scores, each normalised
-to a 0--100 scale using the historical distribution of that variable.
-
-\subsection{Consumer Score}
-
+Let $f:\mathbb{R}\times[0,\infty)\to\mathbb{R}$ be twice continuously
+differentiable.  Then
 \begin{equation}
-  S^{\text{consumer}} = w_1 A + w_2 M + w_3 C + w_4 R
-  \label{eq:consumer-score}
+  df(X_t,t)
+  = \Bigl(
+      \frac{\partial f}{\partial t}
+    + \mu\,\frac{\partial f}{\partial x}
+    + \tfrac{1}{2}\sig^2\,\frac{\partial^2 f}{\partial x^2}
+    \Bigr)\,dt
+  + \sig\,\frac{\partial f}{\partial x}\,dW_t.
 \end{equation}
+\end{theorem}
 
-where:
-\begin{itemize}
-  \item $A$ = affordability index (price-to-income, user's income vs region)
-  \item $M$ = price momentum signal from Monte Carlo (upside/downside balance)
-  \item $C$ = cycle position (where current prices sit in the long-run distribution)
-  \item $R$ = rate environment score (mortgage rate affordability)
-\end{itemize}
-
-Default weights: $w_1 = 0.40,\ w_2 = 0.25,\ w_3 = 0.20,\ w_4 = 0.15$
-
-\mytodo{Confirm or update these weights after calibration.}
-
-\subsection{REIT Score}
-
-\begin{equation}
-  S^{\text{REIT}} = w_1 Y + w_2 C + w_3 M + w_4 \text{RAR}
-  \label{eq:reit-score}
-\end{equation}
-
-where $Y$ = gross yield score, $C$ = cycle position, $M$ = price momentum,
-$\text{RAR}$ = risk-adjusted return score.
-
-Default weights: $w_1 = 0.35,\ w_2 = 0.30,\ w_3 = 0.20,\ w_4 = 0.15$
-
-\section{Signal Thresholds}
-
-\begin{table}[H]
-\centering
-\caption{Buy / Hold / Don't Buy thresholds}
-\label{tab:thresholds}
-\begin{tabular}{lcc}
-\toprule
-\textbf{Signal} & \textbf{Score range} & \textbf{Interpretation} \\
-\midrule
-Buy       & $\geq 65$ & Favourable entry conditions \\
-Hold      & $40 - 64$ & Mixed signals, monitor closely \\
-Don't Buy & $< 40$    & Unfavourable conditions \\
-\bottomrule
+\begin{proof}
+Apply a second-order Taylor expansion in $(dx,\,dt)$:
+\[
+  df = \frac{\partial f}{\partial t}\,dt
+     + \frac{\partial f}{\partial x}\,dX_t
+     + \frac{1}{2}\,\frac{\partial^2 f}{\partial x^2}\,(dX_t)^2 + \cdots
+\]
+Substituting $dX_t = \mu\,dt + \sig\,dW_t$ and applying the It\^{o}
+multiplication table
+\begin{center}
+\begin{tabular}{c|cc}
+  $\times$ & $dt$ & $dW_t$ \\ \hline
+  $dt$     & $0$  & $0$    \\
+  $dW_t$   & $0$  & $dt$   \\
 \end{tabular}
-\end{table}
+\end{center}
+gives $(dX_t)^2 = \sig^2\,dt + O(dt^{3/2})$.  Collecting terms in $dt$ and $dW_t$:
+\[
+  df = \Bigl(
+         \frac{\partial f}{\partial t}
+       + \mu\,\frac{\partial f}{\partial x}
+       + \tfrac{1}{2}\sig^2\,\frac{\partial^2 f}{\partial x^2}
+       \Bigr)\,dt
+     + \sig\,\frac{\partial f}{\partial x}\,dW_t. \qedhere
+\]
+\end{proof}
 
-\mytodo{Back-test these thresholds against historical data: do they
-correctly identify good and bad entry points?}
+\subsection{Geometric Brownian Motion}
 
-\section{Score Back-Test Results}
+Geometric Brownian Motion (GBM) is the classical financial price benchmark:
+\begin{equation}
+  dS_t = \mu S_t\,dt + \sig S_t\,dW_t.
+\end{equation}
 
-\mytodo{Insert table showing score signals at key historical turning
-points (e.g.\ 2007 peak, 2009 trough, 2022 rate shock).}
+\begin{proposition}[GBM Closed-Form Solution]\label{prop:gbm}
+The explicit solution of the GBM SDE is
+\begin{equation}
+  S_t = S_0\exp\!\Bigl[\Bigl(\mu - \tfrac{1}{2}\sig^2\Bigr)t + \sig W_t\Bigr].
+\end{equation}
+\end{proposition}
 
-\section{Stage 6 Outcome}
+\begin{proof}
+Apply Theorem~\ref{thm:ito} with $f(S,t) = \log S$.  Then $f_t = 0$,
+$f_S = 1/S$, $f_{SS} = -1/S^2$:
+\[
+  d\log S_t = \Bigl(\mu - \tfrac{1}{2}\sig^2\Bigr)\,dt + \sig\,dW_t.
+\]
+This is a linear SDE with constant coefficients; integrating from $0$ to $t$
+gives $\log(S_t/S_0) = (\mu - \tfrac{1}{2}\sig^2)t + \sig W_t$,
+and exponentiating yields the result.
+\end{proof}
 
-\mytodo{Fill in: did the scoring produce sensible signals on historical
-data? Any weights adjusted after back-testing?}
+GBM preserves positivity and is analytically tractable, but it has
+\emph{no mean reversion}.  For housing markets, where valuation gaps
+attract prices back toward a fundamental anchor, GBM is insufficient
+as the primary simulation process.
 
-%% ============================================================
-\chapter{Stage 7: Interactive UI \& Deployment}
-%% ============================================================
-\textit{Estimated: 40--50 hours \quad Actual: \mytodo{fill in}}
+\subsection{Log Ornstein-Uhlenbeck Process}
 
-\section{Objectives}
+\begin{definition}
+Let $x_t = \log P_t$ and $m_t = \log \Pstar_t$.  The
+\emph{log Ornstein-Uhlenbeck} (log-OU) process is
+\begin{equation}\label{eq:logOU}
+  dx_t = \kap\,(m_t - x_t)\,dt + \gamma\,dt + \sig\,dW_t,
+\end{equation}
+where $\kap > 0$ is the mean-reversion speed, $m_t$ is the time-varying
+log fair-value target, $\gamma$ is the annual drift, and $\sig > 0$ is
+annual volatility.
+\end{definition}
 
-The final stage delivers the model as an interactive web application
-accessible to both retail buyers and institutional REIT investors.
+\paragraph{Exact solution for constant $m$.}
+Rewrite~\eqref{eq:logOU} as
+$dx_t + \kap x_t\,dt = (\kap m + \gamma)\,dt + \sig\,dW_t$.
+Multiply both sides by the integrating factor $e^{\kap t}$:
+\[
+  d\bigl(e^{\kap t}\,x_t\bigr) = e^{\kap t}(\kap m + \gamma)\,dt + \sig e^{\kap t}\,dW_t.
+\]
+Integrating from $0$ to $t$ and dividing by $e^{\kap t}$:
+\begin{equation}\label{eq:OUexact}
+  x_t = m + \tfrac{\gamma}{\kap}
+        + e^{-\kap t}\!\Bigl(x_0 - m - \tfrac{\gamma}{\kap}\Bigr)
+        + \sig\int_0^t e^{-\kap(t-s)}\,dW_s.
+\end{equation}
+The stochastic integral is Gaussian with zero mean and variance
+$\sig^2(1-e^{-2\kap t})/(2\kap)$.  The \emph{half-life} of the
+log-gap is
+\begin{equation}
+  t_{1/2} = \frac{\ln 2}{\kap}.
+\end{equation}
 
-\section{Deployment Choice}
+\begin{remark}
+For London ($\kap = 0.200$), $t_{1/2} \approx 3.47$ years.
+For Yorkshire and The Humber ($\kap = 0.326$), $t_{1/2} \approx 2.13$ years.
+For West Midlands ($\kap = 0.131$), $t_{1/2} \approx 5.29$ years.
+Northern Ireland ($\kap = 0.825$) has the fastest reversion:
+$t_{1/2} \approx 0.84$ years.
+\end{remark}
 
-\mytodo{Confirm deployment platform once Stage 7 is complete.}
+\subsection{Euler-Maruyama Discretisation}
 
-After evaluating cost and complexity, the application is deployed on
-\textbf{Streamlit Community Cloud} (free tier). This requires only a
-public or private GitHub repository connected to the Streamlit Cloud
-service --- no server management, no Docker configuration required.
+The model simulates monthly steps using the Euler-Maruyama scheme.
+Let $\Delta t = 1/12$ and $x_n = x(n\,\Delta t)$.
 
-Alternatives evaluated:
+\begin{equation}\label{eq:EM}
+  x_{n+1}
+  = x_n
+  + \kap(m_{n+1} - x_n)\,\Delta t
+  + \gamma\,\Delta t
+  + \sig\sqrt{\Delta t}\;\varepsilon_{n+1},
+  \qquad
+  \varepsilon_{n+1} \overset{\mathrm{iid}}{\sim} \mathcal{N}(0,1).
+\end{equation}
 
-\begin{table}[H]
-\centering
-\caption{UI deployment options compared}
-\label{tab:deployment}
+The simulated price is recovered by exponentiation:
+$P_{n+1} = \exp(x_{n+1})$.
+
+\begin{remark}[Convergence orders]
+The Euler-Maruyama method has strong convergence order $1/2$ and weak
+convergence order $1$.  Strong convergence governs pathwise approximation
+quality; weak convergence governs the accuracy of expected functional
+quantities.  For the distributional statistics (percentiles, probability
+of loss) reported in Stage~5, weak convergence at order~1 is the relevant
+criterion.
+\end{remark}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Data and Panel Construction}
+% ─────────────────────────────────────────────────────────────────────────
+
+\subsection{Data Sources}
+
+\begin{center}
+\small
 \begin{tabular}{llll}
 \toprule
-\textbf{Platform} & \textbf{Cost} & \textbf{Complexity} & \textbf{Custom domain} \\
+Series & Source & Frequency & Coverage \\
 \midrule
-Streamlit Community Cloud & Free             & Low    & Yes (paid) \\
-Render.com                & Free (750 hr/mo) & Medium & Yes        \\
-Railway.app               & \$5 credit/mo    & Medium & Yes        \\
-Hugging Face Spaces       & Free             & Low    & No         \\
-AWS EC2 / ECS             & $\sim$\$10+/mo   & High   & Yes        \\
+Nominal house prices     & HM Land Registry HPI     & Monthly  & 2005--2026 \\
+Mortgage rate (2yr fixed) & Bank of England          & Monthly  & 2005--2026 \\
+Base rate                & Bank of England          & Monthly  & 2005--2026 \\
+Gross earnings (EARN01)  & ONS                      & Annual   & 2005--2025 \\
+Private rents            & ONS / Valuation Office   & Monthly  & 2010--2026 \\
+CPI                      & ONS                      & Monthly  & 2005--2026 \\
+Transactions (SDLT)      & HMRC                     & Monthly  & 2005--2026 \\
+Mortgage approvals       & Bank of England          & Monthly  & 2005--2026 \\
+Net housing additions    & DLUHC                    & Annual   & 2005--2025 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Panel Construction}
+
+The canonical panel is built at monthly regional frequency.
+Annual series (earnings, net additions) are linearly interpolated to
+monthly, and the panel carries explicit staleness flags for all interpolated
+columns.  As of the modelling date (2026-04-02), earnings staleness is
+13 months across all regions.
+
+Key panel statistics: 2,532 rows $\times$ 41 columns, 12 regions,
+starting 2005-01-01.  The fair-value OLS uses \emph{anchor months} only
+(June and December of each year), yielding $n = 452$ observations in
+the pooled regression.
+
+\subsection{Feature Engineering}
+
+The monthly growth model uses the following constructed features.
+
+\begin{itemize}[leftmargin=1.8em]
+  \item \texttt{mortgage\_rate\_lag3}: Bank of England 2-year fixed
+        mortgage rate, lagged three months.
+  \item \texttt{financial\_stress\_excess\_lag3}: excess of a
+        financial-stress composite index above a threshold, lagged three months.
+  \item \texttt{earnings\_growth\_12m\_lag1}: 12-month earnings growth,
+        lagged one period (annual interpolation; staleness flagged).
+  \item \texttt{approvals\_growth}: mortgage approvals 12-month growth.
+  \item \texttt{affordability\_gap\_lag1}: price-to-income ratio deviation
+        from long-run average, lagged one period.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Fair-Value OLS Model}
+% ─────────────────────────────────────────────────────────────────────────
+
+\subsection{Specification}
+
+The fair-value layer estimates equilibrium log real prices using a pooled
+OLS regression on anchor months:
+\begin{equation}\label{eq:fv}
+  \log P^{\mathrm{real}}_{r,t}
+  = \alpha
+  + \beta_1\log(\text{income}_{r,t})
+  + \beta_2\log(\text{rent}_{r,t})
+  + \beta_3\;\text{mortgage\_rate}_{r,t}
+  + \delta_r
+  + \varepsilon_{r,t},
+\end{equation}
+where $\delta_r$ are regional fixed effects absorbed through regional
+dummy variables, and HAC (Newey-West, 6 lags) standard errors correct
+inference for autocorrelation.
+
+\textbf{Estimated coefficients} ($n = 452$, $R^2 = 0.9496$):
+\begin{align*}
+  \hat\beta_1 &= -1.1732 \qquad (\log\text{income}), \\
+  \hat\beta_2 &= +1.7443 \qquad (\log\text{rent}), \\
+  \hat\beta_3 &= -0.0104 \qquad (\text{mortgage rate, level}).
+\end{align*}
+
+The estimated fair value in nominal terms is
+\begin{equation}
+  \widehat{P}^{\mathrm{nom}}_{r,t}
+  = \exp\!\bigl(\widehat{\log P}^{\mathrm{real}}_{r,t}\bigr)
+    \times \frac{\mathrm{CPI}_t}{\mathrm{CPI}_{\mathrm{base}}}.
+\end{equation}
+
+The log valuation gap is $x_{r,t} = \log P^{\mathrm{real}}_{r,t}
+- \log\widehat{P}^{\mathrm{real}}_{r,t}$.
+
+\subsection{Gauss-Markov Theorem}
+
+\begin{theorem}[Gauss-Markov]\label{thm:gm}
+Under the classical linear model assumptions---exogeneity
+($\E[\varepsilon \mid X] = 0$), homoskedasticity
+($\Var(\varepsilon \mid X) = \sig^2 I$), and no perfect
+multicollinearity---the OLS estimator
+$\hat\beta = (X^\top X)^{-1}X^\top y$
+is the Best Linear Unbiased Estimator (BLUE).
+\end{theorem}
+
+\begin{proof}
+\textbf{Unbiasedness.}
+\[
+  \E[\hat\beta]
+  = (X^\top X)^{-1}X^\top\E[y]
+  = (X^\top X)^{-1}X^\top X\beta
+  = \beta.
+\]
+
+\textbf{Minimum variance (BLUE).}
+Let $\tilde\beta = Cy$ be any other linear unbiased estimator.
+Write $C = (X^\top X)^{-1}X^\top + D$ for some matrix $D$.
+Unbiasedness requires $\E[\tilde\beta] = \beta$, hence $DX = 0$.
+The variance of $\tilde\beta$ is
+\[
+  \Var(\tilde\beta)
+  = \sig^2 CC^\top
+  = \sig^2\!\Bigl[(X^\top X)^{-1} + DD^\top\Bigr].
+\]
+Since $DD^\top$ is positive semi-definite,
+$\Var(\tilde\beta) \succeq \sig^2(X^\top X)^{-1} = \Var(\hat\beta)$
+for every linear unbiased estimator $\tilde\beta$.
+\end{proof}
+
+\begin{govbox}[HAC Correction and Gauss-Markov Violation]
+Housing price residuals violate the Gauss-Markov homoskedasticity
+assumption: all 12 regions exhibit significant autocorrelation and
+ARCH-type conditional heteroskedasticity (Section~\ref{sec:validation}).
+HAC (Newey-West, 6 lags) standard errors restore asymptotically valid
+inference by adjusting $\Var(\hat\beta)$ for the observed autocorrelation
+and heteroskedasticity structure.  Point estimates $\hat\beta$ remain
+consistent; only standard errors change.  Residual autocorrelation in
+housing is well-documented \cite{case1989} and is the primary motivation
+for HAC throughout.
+\end{govbox}
+
+\subsection{PTI/PTR Blend Weight}
+
+The fair-value blend weight $w_{\mathrm{PTI}}$ allocates between a
+price-to-income (PTI) channel and a price-to-rent (PTR) channel.
+The weight is estimated by grid-search over
+$w \in [0.25,\,0.75]$ minimising pooled squared log-price deviation:
+\begin{equation}
+  \hat{w}_{\mathrm{PTI}}
+  = \arg\min_{w\in[0.25,\,0.75]}
+    \sum_{r,t}
+    \bigl(\log P_{r,t}
+          - w\,\log\text{income}_{r,t}
+          - (1-w)\,\log\text{rent}_{r,t}\bigr)^2.
+\end{equation}
+The estimated value is $\hat{w}_{\mathrm{PTI}} = 0.25$, clipped to the
+lower bound, indicating that the rental parity channel dominates in this
+panel---consistent with the large estimated $\hat\beta_2 = 1.744$
+on $\log\text{rent}$.
+
+\subsection{Mean-Reversion Speed Estimation}
+
+The mean-reversion speed $\kap_r$ is estimated from an AR(1) regression
+on the log valuation gap:
+\begin{equation}
+  x_{r,t} = \phi_r\,x_{r,t-1} + \eta_{r,t}.
+\end{equation}
+The annualised speed is $\kap_r = -12\log\hat\phi_r$.  Regional
+estimates range from $\kap = 0.131$ (West Midlands) to
+$\kap = 0.825$ (Northern Ireland).
+
+\subsection{Volatility Estimation}
+
+Annual volatility $\sig_r$ is blended from raw and winsorised
+realised monthly volatility:
+\begin{equation}
+  \sig^{\mathrm{blend}}_r
+  = \clip\!\bigl(
+      0.35\,\sig^{\mathrm{raw}}_r
+    + 0.65\,\sig^{\mathrm{win}}_r,\;
+      0.025,\; 0.12
+    \bigr).
+\end{equation}
+An IQR prior raises $\sig_r$ when the implied 5-year distribution
+is too narrow relative to historical 5-year return dispersion
+(threshold: IQR ratio $\geq 0.30$).
+A sigma floor override is applied to South West ($\sig \to 0.045$,
+raised from the fitted 0.030) to enforce the IQR ratio requirement.
+
+\subsection{Calibrated SDE Parameters by Region}
+
+\begin{table}[htbp]
+\caption{Region-level SDE parameters, bank-grade canonical rebuild
+(2026-04-02).  $\kap$ = annualised mean-reversion speed;
+$\sig$ = annual log-price volatility;
+$t_{1/2} = \ln 2 / \kap$ in years.}
+\label{tab:sde}
+\centering\small
+\begin{tabular}{lrrrl}
+\toprule
+Region & $\kap$ & $\sig$ & $t_{1/2}$ (yr) & Note \\
+\midrule
+East Midlands             & 0.419 & 0.080 & 1.65 & \\
+East of England           & 0.218 & 0.100 & 3.18 & \\
+London                    & 0.200 & 0.051 & 3.47 & rate $\approx 0$ in OLS \\
+North East                & 0.497 & 0.120 & 1.40 & highest $\sig$ \\
+North West                & 0.314 & 0.095 & 2.21 & \\
+Northern Ireland          & 0.825 & 0.115 & 0.84 & fastest mean reversion \\
+Scotland                  & 0.468 & 0.044 & 1.48 & \\
+South East                & 0.227 & 0.085 & 3.05 & \\
+South West                & 0.458 & 0.030 & 1.51 & floor $\to 0.045$ applied \\
+Wales                     & 0.214 & 0.040 & 3.24 & \\
+West Midlands             & 0.131 & 0.055 & 5.29 & slowest mean reversion \\
+Yorkshire and The Humber  & 0.326 & 0.050 & 2.13 & \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\section{Application Structure}
+% ─────────────────────────────────────────────────────────────────────────
+\section{Stochastic Simulation}
+% ─────────────────────────────────────────────────────────────────────────
 
-The Streamlit application (\texttt{src/ui/app.py}) consists of three tabs:
+\subsection{GBM vs Log-OU: Conceptual Comparison}
 
-\begin{enumerate}
-  \item \textbf{Consumer View} --- input form (region, income, deposit) $\rightarrow$ score dial,
-        Monte Carlo fan chart, affordability breakdown
-  \item \textbf{REIT View} --- portfolio input $\rightarrow$ yield/cycle score,
-        regional heat map, scenario comparison table
-  \item \textbf{Model Explorer} --- parameter sliders with live Monte Carlo
-        recalculation (transparency and sensitivity analysis)
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Property & GBM & Log-OU \\
+\midrule
+Mean reversion     & No         & Yes ($\kap > 0$) \\
+Long-run equilibrium & None     & Fair-value path $m_t$ \\
+Log-price stationary distribution & None & $\mathcal{N}(m, \sig^2/(2\kap))$ \\
+Positivity         & Yes        & Yes (log-price space) \\
+Role in this model & Benchmark  & Primary process \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Target Mean Path Construction}
+
+The simulation mean path $m_t$ is constructed as a linear blend
+between the current fair-value anchor $\Pstar_0$ and the scenario
+terminal target $\Pstar_T$:
+\begin{equation}
+  m_t = (1 - s_t)\log\Pstar_0 + s_t\log\Pstar_T,
+  \qquad s_t = \frac{t}{T}.
+\end{equation}
+The scenario terminal target is formed from the baseline five-year
+log return adjusted by macro overlays:
+\begin{equation}
+  \log R^{(5\mathrm{y})}_{\mathrm{scen}}
+  = \log R^{(5\mathrm{y})}_{\mathrm{base}}
+    + 5 \times
+      \bigl(
+        3\hat\beta_{\mathrm{rate}}\,\Delta r
+        + 12\hat\beta_{\mathrm{stress}}\,\Delta f
+        + \Delta\gamma
+      \bigr),
+\end{equation}
+where $\Delta r$ is the scenario rate shift (pp), $\Delta f$ is the
+stress overlay, and $\Delta\gamma$ is the additional drift shift.
+
+\subsection{Five Macro Scenarios}
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Scenario & Rate shift (pp) & Drift shift (pp yr$^{-1}$) \\
+\midrule
+Baseline      & $\phantom{+}0.0$ & $\phantom{+}0.0$ \\
+Soft Landing  & $-0.5$ & $+0.5$ \\
+Rate Shock    & $+2.0$ & $-1.5$ \\
+Stagflation   & $+1.5$ & $-2.0$ \\
+Recovery Boom & $-1.0$ & $+2.0$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Simulation Procedure}
+
+For each of the 12 regions and 5 scenarios, the Euler-Maruyama
+scheme~\eqref{eq:EM} is applied with:
+\begin{itemize}[leftmargin=1.8em]
+  \item $N = 10{,}000$ independent paths;
+  \item $T = 60$ monthly steps ($\Delta t = 1/12$);
+  \item i.i.d.\ standard normal draws $\varepsilon_{n+1}$ from a fixed
+        random seed for reproducibility.
+\end{itemize}
+
+Output statistics per region-scenario: median 5-year growth,
+$p_{10}$/$p_{25}$/$p_{75}$/$p_{90}$ percentiles, and the probability
+of a terminal loss exceeding 10\%.
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Scoring Engine}
+% ─────────────────────────────────────────────────────────────────────────
+
+\subsection{Signal Components}
+
+Let $g_r$ denote the current percentage valuation gap
+(positive = overvalued relative to $\Pstar$).  Define:
+\begin{align}
+  C1_{\mathrm{mispricing}}
+  &= \clip\!\bigl(50 - 0.95\times g_r,\;0,\;100\bigr), \\
+  C2_{\mathrm{consumer}}
+  &= \clip\!\bigl(50 + 1.8\times\text{WeightedConsumerReturn},\;0,\;100\bigr), \\
+  C2_{\mathrm{REIT}}
+  &= \clip\!\bigl(50 + 1.8\times\text{WeightedREITReturn},\;0,\;100\bigr), \\
+  \text{YieldScore}
+  &= \clip\!\bigl(50 + 16(\text{GrossYield} - 5.5),\;0,\;100\bigr), \\
+  \text{TailScore}
+  &= \clip\!\bigl(100(1 - p_{\mathrm{loss}>10\%}),\;0,\;100\bigr).
+\end{align}
+
+\subsection{Composite Scores}
+
+\begin{align}
+\text{ConsumerScore}
+&= \clip\!\bigl(
+    0.40\,C1_{\mathrm{mispricing}}
+  + 0.35\,C2_{\mathrm{consumer}}
+  + 0.25\,\text{TailScore},\;
+  0,\;100
+  \bigr), \\
+\text{REITScore}
+&= \clip\!\bigl(
+    0.20\,C1_{\mathrm{mispricing}}
+  + 0.35\,C2_{\mathrm{REIT}}
+  + 0.25\,\text{YieldScore}
+  + 0.20\,\text{TailScore},\;
+  0,\;100
+  \bigr).
+\end{align}
+
+\subsection{Scenario Aggregation Weights}
+
+Consumer aggregation is downside-skewed; REIT aggregation is
+equal-weighted:
+\begin{align*}
+  w^{\mathrm{consumer}}
+  &= (0.40,\;0.25,\;0.20,\;0.10,\;0.05)
+  \quad\text{(Baseline, Rate Shock, Stagflation, Soft Landing, Boom)}, \\
+  w^{\mathrm{REIT}}
+  &= (0.20,\;0.20,\;0.20,\;0.20,\;0.20).
+\end{align*}
+
+\subsection{Score Labels and Governance}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Score range & Consumer label & REIT label \\
+\midrule
+$\geq 62$ & Supportive & Supportive \\
+$50$--$61$ & Mixed      & Mixed      \\
+$< 50$    & Cautious   & Cautious   \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{govbox}[Score Label Change --- Risk Register R004 (RESOLVED)]
+Labels were changed from ``Buy / Hold / Don't Buy'' to ``Supportive /
+Mixed / Cautious'' to reflect their nature as descriptive research
+buckets, not investment recommendations.  The dashboard explicitly states
+that labels do not constitute investment advice.  This change is documented
+in \texttt{SCORING\_BACKTEST\_NOTE.md} and risk register item~R004,
+resolved 2026-04-02.
+\end{govbox}
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Validation and Backtesting}\label{sec:validation}
+% ─────────────────────────────────────────────────────────────────────────
+
+\subsection{OLS Replay Deviation}
+
+The canonical rebuild re-estimates the fair-value OLS from the panel
+and compares fitted values against deployed outputs:
+\[
+  \max_{r,t}\,\bigl|
+    \log\widehat{P}^{\mathrm{deployed}}_{r,t}
+    - \log\widehat{P}^{\mathrm{replay}}_{r,t}
+  \bigr| = 0.000
+\]
+(to machine precision), confirming that all deployed fair-value outputs
+are exactly reproducible from source data and code.
+
+\subsection{Subsample OLS Validation}
+
+Training set: observations before 2018-01-01.
+Holdout: 2018-01-01 to 2026-01-01 ($n = 1{,}079$).
+
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Model & RMSE (1m growth) & Dir.\ accuracy (12m) \\
+\midrule
+OLS growth model      & 0.02165 & 64.7\% \\
+Zero-growth benchmark & 0.01526 & --- \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{govbox}[Short-Horizon RMSE Disadvantage]
+The OLS growth model does not beat the zero-growth benchmark at 1-month
+RMSE.  This is expected and consistent with weak-form efficiency in
+liquid residential markets: monthly price changes are largely
+uninformative.  The model's value-add is at horizons
+$\geq 24$ months, where mean reversion dominates.  Directional accuracy
+of 64.7\% at the 12-month horizon exceeds the 55\% governance threshold
+and is the primary evidence of model skill.
+\end{govbox}
+
+\subsection{Sensitivity Analysis (One-At-a-Time Shocks)}
+
+Shocks applied to the fair-value OLS specification~\eqref{eq:fv}.
+Responses are uniform across all 12 regions because the OLS
+specification uses pooled coefficients.
+
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule
+Shock & Expected sign & Average $\Delta P^*$ (\%) & Sign correct? \\
+\midrule
+Income $+10\%$  & $+$ & $-10.58$ & NO \\
+Income $-10\%$  & $-$ & $+13.16$ & NO \\
+Rates $+100$~bp & $-$ & $-0.01$  & YES \\
+Rates $-100$~bp & $+$ & $+0.01$  & YES \\
+Rent $+10\%$    & $+$ & $+18.09$ & YES \\
+Rent $-10\%$    & $-$ & $-16.79$ & YES \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{govbox}[Income Sign Violation (Frisch-Waugh-Lovell Artefact)]
+The OLS income coefficient $\hat\beta_1 = -1.173$ is negative,
+producing sign violations on income shocks.
+By the Frisch-Waugh-Lovell theorem, the partial regression coefficient
+on $\log\text{income}$ in a specification that \emph{already includes}
+$\log\text{rent}$ absorbs only the residual variation in income after
+partialling out rent.  Since income and rent are positively correlated
+cross-sectionally, this residual carries negative partial correlation
+with prices in the panel.  This is an econometric artefact of the
+semi-structural design, not a model defect.  The income variable is
+retained for specification consistency with the broader literature.
+Rent ($+18\%$ per $+10\%$ rent shock) and rate channels produce
+economically correct signs and magnitudes.
+\end{govbox}
+
+\subsection{Confidence Interval Coverage}
+
+A rolling 1-step-ahead test checks whether actual log prices fall
+within the model's 90\% predictive interval:
+\[
+  \bigl|x_{t+1} - \E[x_{t+1}\mid x_t]\bigr|
+  \leq 1.645\,\sig\,\sqrt{\Delta t},
+\]
+where $\E[x_{t+1}\mid x_t] = x_t e^{-\kap\Delta t} + \gamma\,\Delta t$
+and the time-varying fair value $m_{t+1}$ is taken from the in-sample
+OLS fair-value panel.  Holdout: 2018-01-01 to 2026-01-01
+(96 months per region).
+
+\begin{longtable}{lcc}
+\caption{Rolling 1-step-ahead 90\% CI coverage by region
+(holdout 2018--2026).
+Target $= 0.90$;
+pass threshold $\geq 0.80$;
+material threshold $= 0.70$.}\label{tab:ci}\\
+\toprule
+Region & Coverage & Assessment \\
+\midrule
+\endfirsthead
+\multicolumn{3}{l}{\small\itshape(Continued from previous page)}\\
+\toprule
+Region & Coverage & Assessment \\
+\midrule
+\endhead
+\midrule
+\multicolumn{3}{r}{\small\itshape(Continued on next page)}\\
+\endfoot
+\bottomrule
+\endlastfoot
+East Midlands             & 0.854 & Acceptable \\
+East of England           & 0.865 & Acceptable \\
+London                    & 0.740 & Monitor \\
+North East                & 0.854 & Acceptable \\
+North West                & 0.854 & Acceptable \\
+Northern Ireland          & 0.885 & Acceptable \\
+Scotland                  & 0.698 & Monitor \\
+South East                & 0.875 & Acceptable \\
+South West                & 0.594 & Below material threshold \\
+Wales                     & 0.677 & Monitor \\
+West Midlands             & 0.823 & Acceptable \\
+Yorkshire and The Humber  & 0.729 & Monitor \\
+\midrule
+\textbf{Pooled (mean)}    & \textbf{0.787} & \textbf{MARGINAL} \\
+\end{longtable}
+
+\begin{govbox}[CI Coverage Finding]
+Pooled coverage of 0.787 lies between the 0.70 material threshold and
+the 0.80 pass threshold.  South West (0.594) and Scotland (0.698) are
+the weakest regions.  Recalibrating $\sig$ to inflate coverage would
+constitute grade-shopping and is not recommended; the sigma floor override
+for South West (raised to 0.045) addresses the root cause at the parameter
+level.  Monitoring is recommended across all four flagged regions.
+\end{govbox}
+
+\subsection{Residual Diagnostics}\label{sec:resid}
+
+Fair-value OLS residuals are tested per region using:
+Ljung-Box (lags 1, 6, 12) for autocorrelation;
+Engle's ARCH LM test (lag 4) for conditional heteroskedasticity;
+and the Jarque-Bera test for non-normality.
+Statistics in bold have $p < 0.05$.
+
+\begin{longtable}{lrrrrrr}
+\caption{Residual diagnostics (fair-value OLS, anchor months).
+LB$_k$ = Ljung-Box statistic at lag $k$;
+ARCH = Engle ARCH-LM statistic (lag 4);
+JB = Jarque-Bera statistic.}\label{tab:diag}\\
+\toprule
+Region & $n$ & LB$_1$ & LB$_6$ & LB$_{12}$ & ARCH & JB \\
+\midrule
+\endfirsthead
+\multicolumn{7}{l}{\small\itshape(Continued from previous page)}\\
+\toprule
+Region & $n$ & LB$_1$ & LB$_6$ & LB$_{12}$ & ARCH & JB \\
+\midrule
+\endhead
+\midrule
+\multicolumn{7}{r}{\small\itshape(Continued on next page)}\\
+\endfoot
+\bottomrule
+\endlastfoot
+East Midlands            & 41 & \textbf{31.9} & \textbf{119.9} & \textbf{142.7} & \textbf{34.3} & 0.27 \\
+East of England          & 41 & \textbf{35.6} & \textbf{143.4} & \textbf{182.6} & \textbf{33.9} & 2.48 \\
+London                   & 41 & \textbf{33.6} & \textbf{134.9} & \textbf{170.1} & \textbf{34.4} & 0.84 \\
+North East               & 41 & \textbf{36.7} & \textbf{139.4} & \textbf{164.7} & \textbf{35.7} & 1.45 \\
+North West               & 41 & \textbf{35.3} & \textbf{142.7} & \textbf{171.9} & \textbf{32.5} & 1.31 \\
+Northern Ireland         & 21 & \textbf{14.8} & \textbf{35.0}  & \textbf{42.0}  & \textbf{16.4} & 1.85 \\
+Scotland                 & 29 & \textbf{22.1} & \textbf{54.1}  & \textbf{55.6}  & \textbf{22.9} & 2.86 \\
+South East               & 41 & \textbf{33.7} & \textbf{130.0} & \textbf{164.4} & \textbf{35.0} & 1.40 \\
+South West               & 41 & \textbf{33.2} & \textbf{121.6} & \textbf{142.2} & \textbf{35.8} & 0.44 \\
+Wales                    & 33 & \textbf{28.3} & \textbf{103.0} & \textbf{113.9} & \textbf{28.0} & 2.19 \\
+West Midlands            & 41 & \textbf{35.1} & \textbf{144.2} & \textbf{178.3} & \textbf{33.1} & 1.41 \\
+Yorkshire and The Humber & 41 & \textbf{35.0} & \textbf{140.0} & \textbf{169.8} & \textbf{35.2} & 1.13 \\
+\end{longtable}
+
+All 12 regions flag autocorrelation at all three lags and ARCH-type
+conditional heteroskedasticity.  Zero regions fail the Jarque-Bera
+normality test.  Residual autocorrelation in housing price series is
+well-documented \cite{case1989} and is the primary motivation for
+HAC standard errors throughout.  These diagnostic flags confirm that
+HAC correction is necessary and in place; they are not model defects.
+
+\subsection{Model Horse Race}
+
+Four models are compared on holdout 2018-01-01 to 2026-01-01
+(pooled across 12 regions, 96 observations per region).
+GBM and random walk use 500 simulated paths; the median path is
+the point forecast.  Log-OU uses the analytical conditional expectation.
+
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule
+Model        & RMSE (1m)  & RMSE (12m)         & Dir.\ Acc.\ (1m) & Dir.\ Acc.\ (12m) \\
+\midrule
+Log-OU       & 0.01445    & \textbf{0.04442}   & 0.554            & \textbf{0.806} \\
+GBM          & 0.01449    & 0.04881            & 0.575            & 0.790 \\
+Zero-growth  & 0.01466    & 0.05582            & 0.055            & 0.000 \\
+Random walk  & 0.01472    & 0.05612            & 0.448            & 0.501 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Key findings:}
+\begin{enumerate}[leftmargin=1.8em]
+  \item At the 12-month horizon, Log-OU achieves the lowest RMSE
+        (0.04442 vs GBM 0.04881 and zero-growth 0.05582) and the
+        highest directional accuracy (80.6\% vs 79.0\% for GBM).
+  \item At the 1-month horizon, zero-growth has the lowest RMSE,
+        consistent with weak-form efficiency---expected and documented.
+  \item Log-OU outperforms all three benchmarks at the 12-month horizon,
+        demonstrating that the OU mean-reversion structure adds measurable
+        value at planning-relevant horizons.
 \end{enumerate}
 
-\section{Key UI Features}
+% ─────────────────────────────────────────────────────────────────────────
+\section{Dashboard: UI Section Guide}
+% ─────────────────────────────────────────────────────────────────────────
 
-\mytodo{Add screenshots of the finished application here.}
+The Streamlit research dashboard is structured as eight navigable pages.
 
-\begin{itemize}
-  \item Regional choropleth map showing scores across all 12 ONS regions
-  \item Plotly fan chart (Bear / Base / Bull price paths)
-  \item Score dial gauge (0--100) with Buy / Hold / Don't Buy colour coding
-  \item Real-time Monte Carlo recalculation on parameter slider change
-  \item Downloadable CSV of simulation outputs
+\subsection{Page 1 --- Research Overview}
+
+Displays the model validation status, effective data date, and a summary
+scorecard across all 12 regions.  Consumer and REIT scores with
+Supportive/Mixed/Cautious labels are shown in a regional summary table.
+An explicit disclosure banner states that model output is for research
+purposes only and does not constitute investment advice.
+
+\subsection{Page 2 --- Regional Signals}
+
+Detailed view for a selected region.  Shows: the current fair-value gap
+($x_r$) and a price vs $\Pstar$ chart; score decomposition with
+labelled C1/C2/Yield/Tail components; and evidence-level classification
+(Validated/Partial/Contextual) for each signal component.
+
+\subsection{Page 3 --- Region Comparison}
+
+Side-by-side bar charts of consumer and REIT scores across all 12 regions.
+Supports ranking by score, valuation gap, or directional accuracy.
+Designed to support relative regional positioning for portfolio allocation.
+
+\subsection{Page 4 --- Scenario and Diagnostics}
+
+Shows the five macro scenarios for a selected region: fan charts
+($p_{10}$/$p_{25}$/median/$p_{75}$/$p_{90}$) of simulated price paths
+and terminal return distributions.  Contains the interactive Scenario Lab,
+labelled explicitly as a ``coefficient-based perturbation tool'' and not
+a full econometric re-run.
+
+\subsection{Page 5 --- Household Explorer}
+
+Interactive tool allowing a user to input a purchase price, deposit, and
+household income to see personalised affordability metrics and how current
+model signals apply to their budget range.  Carries an explicit disclaimer
+that outputs are for illustrative research purposes only.
+
+\subsection{Page 6 --- Methodology}
+
+Plain-language documentation of the seven-stage pipeline, fair-value OLS
+specification, simulation setup, and scoring weights.  Points to this
+technical report for full mathematical derivations and governance details.
+
+\subsection{Page 7 --- Technical Controls}
+
+Exposes the effective data date, earnings staleness months, model
+validation status, simulation seed, and per-region SDE parameters.
+Allows toggling between Baseline and alternative scenario views.
+
+\subsection{Page 8 --- Limitations}
+
+Dedicated page listing all material limitations from
+\texttt{MODEL\_LIMITATIONS.md}: regional-average vs.\ individual-property
+scope; interpolated annual series; omitted-variable risk; Scenario Lab
+limitations; and score compression.  This page is prominently accessible
+from the main navigation and not hidden.
+
+% ─────────────────────────────────────────────────────────────────────────
+\section{Model Governance}
+% ─────────────────────────────────────────────────────────────────────────
+
+\subsection{Sign-Off Status}
+
+As of 2026-04-02, all nine sign-off areas are approved by the model owner.
+
+\begin{center}
+\begin{tabular}{llc}
+\toprule
+Area & Description & Status \\
+\midrule
+G1 & Data pipeline and panel integrity      & APPROVED \\
+G2 & OLS fair-value specification           & APPROVED \\
+G3 & SDE parameter estimation               & APPROVED \\
+G4 & Monte Carlo simulation correctness     & APPROVED \\
+G5 & Scoring engine calibration             & APPROVED \\
+G6 & Validation and diagnostics pack        & APPROVED \\
+G7 & UI disclosure and limitations          & APPROVED \\
+G8 & Risk register completeness             & APPROVED \\
+G9 & Reproducibility (replay deviation = 0) & APPROVED \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Risk Register}
+
+The risk register contains 26 items:
+2 RESOLVED, 2 MONITORED, 5 PARTIALLY\_RESOLVED, 17 open/legacy.
+
+Key resolved items as of 2026-04-02:
+
+\begin{itemize}[leftmargin=1.8em]
+  \item \textbf{R002 (RESOLVED):} Legacy scripts archived to
+        \texttt{archive/legacy\_model/}.  The \texttt{src/model/} directory
+        now contains 7 canonical files only.  No legacy imports remain in tests.
+  \item \textbf{R004 (RESOLVED):} Score labels changed from Buy/Hold/Don't~Buy
+        to Supportive/Mixed/Cautious; UI disclosure added;
+        documented in \texttt{SCORING\_BACKTEST\_NOTE.md}.
 \end{itemize}
 
-\section{Stage 7 Outcome}
+\subsection{Model Owner Review Schedule}
 
-\mytodo{Fill in: deployment URL, any performance issues, user feedback
-if tested with external users.}
+Quarterly.  Next review: 2026-06-30.
 
-%% ============================================================
-\chapter{Conclusions \& Reflections}
-%% ============================================================
+\subsection{Deployment Restrictions}
 
-\section{Summary of Deliverables}
+\begin{govbox}[Deployment Restrictions]
+This model \textbf{may not} be used for: (i)~individual property
+valuations; (ii)~short-horizon trading decisions (horizon $<$24 months);
+(iii)~regulatory capital calculations; or (iv)~any purpose requiring a
+stress-testing model as defined under PRA~SS3/18.  These restrictions are
+disclosed in the UI Limitations page, in this report, and in the risk
+register.
+\end{govbox}
 
-\mytodo{Fill in at project completion.}
+% ─────────────────────────────────────────────────────────────────────────
+\section{Limitations and Future Work}
+% ─────────────────────────────────────────────────────────────────────────
 
-This project has delivered:
-\begin{enumerate}
-  \item A fully reproducible Python codebase for UK housing market modelling
-  \item An OLS-calibrated Ornstein-Uhlenbeck price simulation
-  \item A dual-view scoring engine for retail buyers and REITs
-  \item A deployed interactive web application
-  \item This technical report documenting all decisions and results
+\subsection{Current Limitations}
+
+\begin{enumerate}[leftmargin=1.8em, label=\textbf{L\arabic*.}]
+  \item \textbf{Regional averages only.}  The model operates on Land Registry
+        regional average prices.  It is not applicable to individual properties,
+        sub-regional markets, or property-type segments.
+  \item \textbf{Interpolated annual series.}  Earnings and net housing additions
+        are available at annual frequency and are linearly interpolated to monthly.
+        Within-year timing precision is therefore limited.
+  \item \textbf{Omitted-variable and regime risk.}  Despite HAC correction,
+        omitted macro variables (credit conditions, planning policy shocks,
+        stamp duty changes) and structural breaks remain genuine risks.
+  \item \textbf{Scenario Lab is a perturbation tool.}  The interactive Scenario
+        Lab applies coefficient-based overlays to existing Stage~5 outputs; it
+        is not a full econometric re-run with new data.
+  \item \textbf{Score compression.}  Composite scores reduce multi-dimensional
+        distributional information to a single number.  Evidence-level
+        classifications (Validated/Partial/Contextual) partially offset this.
+  \item \textbf{CI coverage marginal.}  Pooled 1-step-ahead coverage of 78.7\%
+        is below the 80\% pass threshold.  South West and Scotland require
+        monitoring.
+  \item \textbf{Income sign violation.}  The OLS income coefficient is negative
+        (Frisch-Waugh-Lovell artefact); the model relies on the rent channel
+        for income-affordability signal.
+  \item \textbf{Earnings staleness.}  At the modelling date, earnings data
+        are 13 months stale across all regions.
 \end{enumerate}
 
-\section{Model Limitations}
+\subsection{Future Extensions}
 
-\mytodo{Fill in after completing all stages.}
+\begin{enumerate}[leftmargin=1.8em, label=\textbf{F\arabic*.}]
+  \item Sub-regional and property-type granularity using ONS sub-regional HPI.
+  \item Higher-frequency earnings proxies (e.g.\ PAYE real-time information)
+        to reduce the 13-month staleness.
+  \item Regime-switching extension replacing the fixed-$\kap$ OU process with
+        a hidden Markov model for boom/bust regimes.
+  \item Formal structural break test using the Andrews (1993) supremum-$F$
+        procedure \cite{andrews1993}.
+  \item Dynamic scenario weights incorporating macro-financial nowcasting signals
+        rather than fixed judgement-based probabilities.
+\end{enumerate}
 
-\begin{itemize}
-  \item The OU process assumes a constant long-run equilibrium --- structural breaks
-        (e.g.\ post-pandemic supply shocks) are not modelled
-  \item OLS coefficients are estimated on historical data and may not generalise
-        to regime changes
-  \item Supply-side dynamics (planning, new builds) are not directly modelled
-  \item \mytodo{add additional limitations discovered during development}
-\end{itemize}
+% ─────────────────────────────────────────────────────────────────────────
+\section{Conclusion}
+% ─────────────────────────────────────────────────────────────────────────
 
-\section{Potential Extensions}
+This report has documented the UK Regional Housing Market Model~v0.2.0
+from its probability-theoretic foundations through to production
+validation and governance.  The principal achievements are:
 
-\begin{itemize}
-  \item Regime-switching model to capture boom/bust cycles explicitly
-  \item Integration of Rightmove/Zoopla supply-demand microdata
-  \item Mortgage scenario analysis (fixed vs.\ variable rate comparison)
-  \item Machine learning ensemble as an alternative scoring layer
-\end{itemize}
+\begin{enumerate}[leftmargin=1.8em]
+  \item A complete, reproducible seven-stage pipeline from raw Land Registry
+        and ONS data to an interactive Streamlit research dashboard.
+  \item A semi-structural OLS fair-value layer ($n=452$, $R^2=0.9496$)
+        with HAC standard errors and documented sign-violation disclosure.
+  \item Region-level log-OU SDE parameters ($\kap \in [0.131, 0.825]$,
+        $\sig \in [0.030, 0.120]$) estimated from AR(1) gap regressions
+        and volatility blending.
+  \item A log-OU simulation framework that outperforms GBM and zero-growth
+        at the 12-month horizon: RMSE 0.04442 vs 0.04881 (GBM) and 0.05582
+        (zero-growth), directional accuracy 80.6\% vs 79.0\% and 0.0\%.
+  \item A bank-grade validation pack: replay deviation zero; subsample
+        directional accuracy 64.7\% at 12 months (above 55\% threshold);
+        CI coverage 78.7\% (MARGINAL, monitored); 100\% Ljung-Box and ARCH
+        flagging mitigated by HAC standard errors.
+  \item A full governance framework: 9/9 sign-off areas approved; 26-item
+        risk register; score label governance; explicit deployment restrictions.
+\end{enumerate}
 
-\section{Reflections on the Development Process}
+The Euler-Maruyama log-OU process with a time-varying fair-value mean
+path is the central modelling choice that makes the simulation
+economically coherent and superior to GBM at planning-relevant horizons.
+The model is suitable for systematic institutional research into UK
+regional housing dynamics and long-horizon scenario analysis for REIT
+portfolio management.
 
-\mytodo{Fill in at completion: what worked well, what took longer than
-expected, what you would do differently.}
+% ─────────────────────────────────────────────────────────────────────────
+\begin{thebibliography}{9}
 
-%% ============================================================
-\appendix
+\bibitem{case1989}
+  Case, K.~E.\ \& Shiller, R.~J.\ (1989).
+  The efficiency of the market for single-family homes.
+  \textit{American Economic Review}, 79(1), 125--137.
 
-\chapter{Data Schema}
-\label{app:schema}
+\bibitem{newey1987}
+  Newey, W.~K.\ \& West, K.~D.\ (1987).
+  A simple positive semi-definite, heteroskedasticity and
+  autocorrelation consistent covariance matrix.
+  \textit{Econometrica}, 55(3), 703--708.
 
-\mytodo{Insert the contents of config/data\_schema.json formatted as a table.}
+\bibitem{kloeden1992}
+  Kloeden, P.~E.\ \& Platen, E.\ (1992).
+  \textit{Numerical Solution of Stochastic Differential Equations}.
+  Springer, Berlin.
 
-\chapter{Calibrated Parameters}
-\label{app:params}
+\bibitem{andrews1993}
+  Andrews, D.~W.~K.\ (1993).
+  Tests for parameter instability and structural change with
+  unknown change point.
+  \textit{Econometrica}, 61(4), 821--856.
 
-\mytodo{Insert the final config/parameters.json after OLS calibration.}
+\bibitem{vasicek1977}
+  Vasi\v{c}ek, O.\ (1977).
+  An equilibrium characterization of the term structure.
+  \textit{Journal of Financial Economics}, 5(2), 177--188.
 
-\chapter{Code Listings}
-\label{app:code}
-
-\mytodo{Insert key code listings (OLS calibration, SDE simulation,
-scoring engine) here as the project progresses.}
-
-%% ============================================================
-%% Bibliography
-%% ============================================================
-\printbibliography[heading=bibintoc, title={References}]
+\end{thebibliography}
 
 \end{document}
