@@ -1,0 +1,95 @@
+{
+  "generated_at_utc": "2026-04-04T10:15:07+00:00",
+  "descriptive_panel_file": "descriptive_market_panel.csv",
+  "row_count": 5676,
+  "region_count": 12,
+  "panel_start": "2005-01-01",
+  "panel_end": "2026-01-01",
+  "latest_market_data_end": "2026-01-01",
+  "latest_complete_housing_context_end": "2024-12-01",
+  "latest_house_price_end": "2026-01-01",
+  "latest_rental_level_end": "2024-12-01",
+  "latest_rental_yield_end": "2024-01-01",
+  "descriptive_only": true,
+  "note": "Descriptive market panel only. It extends beyond the harmonised model panel and is not used for Stage 4 estimation or validated Stage 5/6 calibration.",
+  "source_coverage": {
+    "house_prices": {
+      "source_file": "land_registry_hpi_202603.csv",
+      "file_modified_utc": "2026-03-30T20:19:13+00:00",
+      "observation_start": "1968-01-04",
+      "observation_end": "2026-01-01"
+    },
+    "mortgage_rate": {
+      "source_file": "boe_mortgage_rate_202603.csv",
+      "file_modified_utc": "2026-03-30T20:19:16+00:00",
+      "observation_start": "2000-01-01",
+      "observation_end": "2026-03-01"
+    },
+    "base_rate": {
+      "source_file": "boe_base_rate_202603.csv",
+      "file_modified_utc": "2026-03-30T20:19:15+00:00",
+      "observation_start": "2000-01-01",
+      "observation_end": "2026-03-01"
+    },
+    "mortgage_approvals": {
+      "source_file": "boe_mortgage_approvals.csv",
+      "file_modified_utc": "2026-03-22T15:23:33+00:00",
+      "observation_start": "2005-01-01",
+      "observation_end": "2025-10-01"
+    },
+    "cpi": {
+      "source_file": "ons_cpi_202603.csv",
+      "file_modified_utc": "2026-03-30T20:19:18+00:00",
+      "observation_start": "2000-01-01",
+      "observation_end": "2026-02-01"
+    },
+    "earnings": {
+      "source_file": "ons_earnings_regional.csv",
+      "file_modified_utc": "2026-03-07T19:54:07+00:00",
+      "observation_start": "2000-12-31",
+      "observation_end": "2024-12-31"
+    },
+    "rental_levels": {
+      "source_file": "ons_rental_levels_202603.csv",
+      "file_modified_utc": "2026-03-30T20:19:43+00:00",
+      "observation_start": "2000-01-01",
+      "observation_end": "2024-12-01"
+    },
+    "rental_yield": {
+      "source_file": "rental_yield_202603.csv",
+      "file_modified_utc": "2026-03-30T20:19:43+00:00",
+      "observation_start": "2000-01-01",
+      "observation_end": "2024-01-01"
+    },
+    "rental_index": {
+      "source_file": "ons_rental_index_202603.csv",
+      "file_modified_utc": "2026-03-30T20:19:41+00:00",
+      "observation_start": "2000-01-01",
+      "observation_end": "2026-01-01"
+    },
+    "population": {
+      "source_file": "ons_population.csv",
+      "file_modified_utc": "2026-03-07T19:54:07+00:00",
+      "observation_start": "2000-06-30",
+      "observation_end": "2024-06-30"
+    },
+    "affordability": {
+      "source_file": "ons_affordability_ratio.csv",
+      "file_modified_utc": "2026-03-07T19:54:09+00:00",
+      "observation_start": "2000-12-31",
+      "observation_end": "2024-12-31"
+    },
+    "transactions": {
+      "source_file": "hmrc_transactions.csv",
+      "file_modified_utc": "2026-03-22T15:23:34+00:00",
+      "observation_start": "2005-04-01",
+      "observation_end": "2025-10-01"
+    },
+    "unemployment": {
+      "source_file": "ons_regional_unemployment.csv",
+      "file_modified_utc": "2026-03-22T15:23:34+00:00",
+      "observation_start": "2005-01-01",
+      "observation_end": "2025-10-01"
+    }
+  }
+}

@@ -21,13 +21,13 @@ lxml>=4.9,<6
 odfpy>=1.4,<2
 python-dotenv>=1.0,<2
 
-# Optional mapping utilities retained from earlier stages
-folium>=0.15,<0.17
-geopandas>=0.14,<1
+# Optional — install locally only (require system C libraries not available in CI)
+# folium>=0.15,<0.17
+# geopandas>=0.14,<1
 
-# Optional monitoring destinations (install as needed)
-watchtower>=3.0.0  # optional CloudWatch logging; requires boto3
-# datadog-lambda>=4.0.0  # optional Datadog logging (uncomment if needed)
+# Optional — install in production only (require boto3 / datadog agent)
+# watchtower>=3.0.0  # CloudWatch logging
+# datadog-lambda>=4.0.0  # Datadog logging
 
 # Testing
 pytest>=8.0,<9

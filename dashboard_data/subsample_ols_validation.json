@@ -1,0 +1,12 @@
+{
+  "train_end": "2017-12-01",
+  "holdout_start": "2018-01-01",
+  "holdout_n_obs": 1079,
+  "holdout_rmse": 0.021652,
+  "zero_growth_rmse": 0.015259,
+  "beats_zero_growth": false,
+  "directional_1m": 0.634,
+  "directional_6m": 0.6443,
+  "directional_12m": 0.647,
+  "generated_at_utc": "2026-04-02T19:35:12+00:00"
+}

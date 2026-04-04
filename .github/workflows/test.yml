@@ -23,11 +23,23 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run tests
+      - name: Run CI tests
+        # Only runs tests that do not require pre-built model outputs (data/outputs/).
+        # The following files are integration/acceptance tests that must be run
+        # locally after executing the canonical rebuild pipeline:
+        #   test_canonical_pipeline, test_validation_pack, test_stage4_ready_panel,
+        #   test_calibration_drift, test_governance_and_freshness,
+        #   test_independent_validation, test_dashboard_data,
+        #   test_stage7_smoke, test_ui_parameters
+        # Within test_simulation.py, test_iqr_minimum_coverage also needs data.
         run: |
-          pytest tests/ -q --tb=short \
-            -k "not test_data_freshness and not test_rate_channel_stability" \
-            2>&1 | tee pytest-output.txt
+          pytest \
+            tests/test_scoring.py \
+            tests/test_ingestion.py \
+            tests/test_simulation.py \
+            tests/test_ui_governance.py \
+            -k "not test_iqr_minimum_coverage" \
+            -q --tb=short 2>&1 | tee pytest-output.txt
           exit ${PIPESTATUS[0]}
 
       - name: Upload test results

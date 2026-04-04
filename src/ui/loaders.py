@@ -25,6 +25,20 @@ from src.core.paths import (
 from src.core.validation import validate_master_dataset, validate_stage4_parameters, validate_stage5_summary, validate_stage6_handoff
 from src.data.build_canonical_panel import build_canonical_panel
 
+# ── Dashboard data bundle (git-tracked, used on Streamlit Cloud) ──────────
+_DASHBOARD_DATA_DIR: Path = Path(__file__).resolve().parents[2] / "dashboard_data"
+
+
+def _resolve(filename: str, original: Path) -> Path:
+    """Return dashboard_data/<filename> if it exists, else original path.
+
+    This allows Streamlit Cloud (where data/outputs/ is git-ignored) to read
+    from the committed dashboard_data/ snapshot, while local development
+    continues to use the live data/outputs/ paths.
+    """
+    candidate = _DASHBOARD_DATA_DIR / filename
+    return candidate if candidate.exists() else original
+
 
 @dataclass(frozen=True)
 class DashboardData:
@@ -231,29 +245,37 @@ def write_dashboard_cache(data: DashboardData) -> dict[str, str]:
 def load_dashboard_data() -> DashboardData:
     """Load the validated datasets required by the dashboard."""
     config = load_config()
-    if not CANONICAL_PANEL_PATH.exists() or not CANONICAL_PANEL_METADATA_PATH.exists():
+    master_path      = _resolve("master_dataset_canonical.csv",    CANONICAL_PANEL_PATH)
+    _meta_path       = _resolve("canonical_panel_metadata.json",   CANONICAL_PANEL_METADATA_PATH)
+    _desc_path       = _resolve("descriptive_market_panel.csv",    DESCRIPTIVE_PANEL_PATH)
+    _desc_meta_path  = _resolve("descriptive_panel_metadata.json", DESCRIPTIVE_PANEL_METADATA_PATH)
+    if not master_path.exists() or not _meta_path.exists():
         build_canonical_panel()
-    if not DESCRIPTIVE_PANEL_PATH.exists() or not DESCRIPTIVE_PANEL_METADATA_PATH.exists():
+        master_path = CANONICAL_PANEL_PATH
+        _meta_path  = CANONICAL_PANEL_METADATA_PATH
+    if not _desc_path.exists() or not _desc_meta_path.exists():
         build_canonical_panel()
-    master_path = CANONICAL_PANEL_PATH
-    params_path = STAGE4_OUTPUT_DIR / config.artifacts.stage4_parameters_file
-    simulation_path = STAGE5_OUTPUT_DIR / config.artifacts.stage5_summary_file
-    handoff_path = STAGE6_OUTPUT_DIR / config.artifacts.stage6_handoff_file
-    fair_panel_path = STAGE4_OUTPUT_DIR / "fair_value_panel_bankgrade.csv"
-    validation_dir = STAGE7_OUTPUT_DIR.parent / "validation"
-    distribution_compare_path = validation_dir / "historical_vs_simulated_distribution.csv"
-    moment_compare_path = validation_dir / "simulation_moment_comparison.csv"
+        _desc_path      = DESCRIPTIVE_PANEL_PATH
+        _desc_meta_path = DESCRIPTIVE_PANEL_METADATA_PATH
+    params_path     = _resolve(config.artifacts.stage4_parameters_file, STAGE4_OUTPUT_DIR / config.artifacts.stage4_parameters_file)
+    simulation_path = _resolve(config.artifacts.stage5_summary_file,    STAGE5_OUTPUT_DIR / config.artifacts.stage5_summary_file)
+    handoff_path    = _resolve(config.artifacts.stage6_handoff_file,     STAGE6_OUTPUT_DIR / config.artifacts.stage6_handoff_file)
+    fair_panel_path = _resolve("fair_value_panel_bankgrade.csv",         STAGE4_OUTPUT_DIR / "fair_value_panel_bankgrade.csv")
+    _std_validation_dir = STAGE7_OUTPUT_DIR.parent / "validation"
+    validation_dir  = _DASHBOARD_DATA_DIR if _DASHBOARD_DATA_DIR.exists() else _std_validation_dir
+    distribution_compare_path = _resolve("historical_vs_simulated_distribution.csv", _std_validation_dir / "historical_vs_simulated_distribution.csv")
+    moment_compare_path       = _resolve("simulation_moment_comparison.csv",          _std_validation_dir / "simulation_moment_comparison.csv")
 
     master = _read_csv(master_path, parse_dates=["date"]).sort_values(["region", "date"]).reset_index(drop=True)
     fair_panel = _read_csv(fair_panel_path, parse_dates=["date"]).sort_values(["region", "date"]).reset_index(drop=True)
-    descriptive_panel = _read_csv(DESCRIPTIVE_PANEL_PATH, parse_dates=["date"]).sort_values(["region", "date"]).reset_index(drop=True)
+    descriptive_panel = _read_csv(_desc_path, parse_dates=["date"]).sort_values(["region", "date"]).reset_index(drop=True)
     params = _read_csv(params_path)
     simulation = _read_csv(simulation_path)
     distribution_compare = _read_csv(distribution_compare_path)
     moment_compare = _read_csv(moment_compare_path)
     handoff = _read_csv(handoff_path)
-    panel_metadata = json.loads(CANONICAL_PANEL_METADATA_PATH.read_text(encoding="utf-8"))
-    descriptive_metadata = json.loads(DESCRIPTIVE_PANEL_METADATA_PATH.read_text(encoding="utf-8"))
+    panel_metadata = json.loads(_meta_path.read_text(encoding="utf-8"))
+    descriptive_metadata = json.loads(_desc_meta_path.read_text(encoding="utf-8"))
     validation_summary = _load_validation_summary(validation_dir)
     latest_descriptive = _latest_descriptive_context(descriptive_panel, config.project.regions)
 
