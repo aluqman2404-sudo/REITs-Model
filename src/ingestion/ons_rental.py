@@ -3,9 +3,10 @@ Stage 2: ONS Private Rental Market data ingestion.
 Model Variable 6: Rental Yield proxy.
 
 Two datasets combined to compute rental yield:
-  A) ONS Index of Private Housing Rental Prices (IPHRP)
-     — monthly rental price INDEX by region (2015=100)
-     — used to track rental price GROWTH over time
+  A) ONS Price Index of Private Rents (PIPR) — historical series
+     — monthly rental price INDEX by region (Jan 2015=100)
+     — replaces the discontinued IPHRP (discontinued Feb 2024)
+     — available from Jan 2005 to latest month, all UK regions
 
   B) ONS Private Rental Market Statistics (PRMS)
      — median monthly rent levels (£) by region
@@ -13,7 +14,11 @@ Two datasets combined to compute rental yield:
 
 Yield = (Median Monthly Rent × 12) / Average House Price × 100
 
-Both are published by ONS and require no authentication.
+Sources:
+  PIPR: https://www.ons.gov.uk/economy/inflationandpriceindices/datasets/
+        priceindexofprivaterentsukhistoricalseries
+  PRMS: https://www.ons.gov.uk/peoplepopulationandcommunity/housing/datasets/
+        privaterentalmarketsummarystatisticsengland
 """
 
 import io
@@ -35,52 +40,95 @@ _HEADERS = {
 _REGIONS    = PARAMS["project"]["regions"]
 _START_YEAR = PARAMS["project"]["base_year"]
 
-# ONS generator URLs for IPHRP regional indices
-# Series codes: Great Britain and regions
-_IPHRP_SERIES = {
-    "United Kingdom":             "/economy/inflationandpriceindices/timeseries/czom/iphrp",
-    "England":                    "/economy/inflationandpriceindices/timeseries/czoo/iphrp",
-    "London":                     "/economy/inflationandpriceindices/timeseries/czox/iphrp",
-    "South East":                 "/economy/inflationandpriceindices/timeseries/czoy/iphrp",
-    "East of England":            "/economy/inflationandpriceindices/timeseries/czoz/iphrp",
-    "South West":                 "/economy/inflationandpriceindices/timeseries/czpa/iphrp",
-    "East Midlands":              "/economy/inflationandpriceindices/timeseries/czpb/iphrp",
-    "West Midlands":              "/economy/inflationandpriceindices/timeseries/czpc/iphrp",
-    "Yorkshire and The Humber":   "/economy/inflationandpriceindices/timeseries/czpd/iphrp",
-    "North West":                 "/economy/inflationandpriceindices/timeseries/czpe/iphrp",
-    "North East":                 "/economy/inflationandpriceindices/timeseries/czpf/iphrp",
-    "Wales":                      "/economy/inflationandpriceindices/timeseries/czpg/iphrp",
-    "Scotland":                   "/economy/inflationandpriceindices/timeseries/czph/iphrp",
-}
+# ONS PIPR historical series dataset page — scraped for latest Excel URL
+_PIPR_DATASET_PAGE = (
+    "https://www.ons.gov.uk/economy/inflationandpriceindices/"
+    "datasets/priceindexofprivaterentsukhistoricalseries"
+)
+
+# Known direct URL for PIPR historical series (March 2025 release)
+# Updated from dataset page — check annually
+_PIPR_DIRECT_URL = (
+    "https://www.ons.gov.uk/file?uri=/economy/inflationandpriceindices/"
+    "datasets/priceindexofprivaterentsukhistoricalseries/"
+    "26march2025/priceindexofprivaterentsukhistoricalseries.xlsx"
+)
 
 # ONS PRMS — Private Rental Market Statistics download page
 _PRMS_PAGE = (
     "https://www.ons.gov.uk/peoplepopulationandcommunity/housing/datasets/"
-    "privaterentalmarketsummarystatisticsengland"
+    "privaterentalmarketsummarystatisticsinengland"
 )
+
+# PIPR region names in Excel → ONS standard names used by this model
+_PIPR_REGION_MAP = {
+    "United Kingdom":              None,          # aggregate — not used
+    "Great Britain":               None,          # aggregate — not used
+    "England":                     None,          # aggregate — not used
+    "ENGLAND":                     None,
+    "Wales":                       "Wales",
+    "Scotland":                    "Scotland",
+    "Northern Ireland":            "Northern Ireland",
+    "North East":                  "North East",
+    "North West":                  "North West",
+    "Yorkshire and The Humber":    "Yorkshire and The Humber",
+    "Yorkshire and the Humber":    "Yorkshire and The Humber",
+    "East Midlands":               "East Midlands",
+    "West Midlands":               "West Midlands",
+    "East of England":             "East of England",
+    "East":                        "East of England",   # Excel sometimes truncates this
+    "London":                      "London",
+    "South East":                  "South East",
+    "South West":                  "South West",
+    # PRMS uses UPPER CASE region names
+    "WALES":                       "Wales",
+    "SCOTLAND":                    "Scotland",
+    "NORTHERN IRELAND":            "Northern Ireland",
+    "NORTH EAST":                  "North East",
+    "NORTH WEST":                  "North West",
+    "YORKSHIRE AND THE HUMBER":    "Yorkshire and The Humber",
+    "EAST MIDLANDS":               "East Midlands",
+    "WEST MIDLANDS":               "West Midlands",
+    "EAST OF ENGLAND":             "East of England",
+    "EAST":                        "East of England",
+    "LONDON":                      "London",
+    "SOUTH EAST":                  "South East",
+    "SOUTH WEST":                  "South West",
+}
 
 
 def fetch_ons_rental_index(save: bool = True) -> pd.DataFrame:
     """
-    Fetch ONS IPHRP regional rental price indices (monthly, 2015=100).
+    Fetch ONS PIPR regional rental price indices (monthly, Jan 2015=100).
 
-    Tries:
-      1. ONS IPHRP bulletin page — download full Excel workbook (one request)
-      2. Individual generator URLs per region (with delays)
-      3. Placeholder based on approximate 2015 base rents + growth
+    Downloads the ONS Price Index of Private Rents (PIPR) historical series
+    Excel file which replaced the discontinued IPHRP in February 2024.
+
+    Data spans January 2005 to latest available month for all UK regions.
 
     Returns:
         DataFrame with columns: date, region, rental_index
     """
-    print("  Fetching ONS IPHRP rental price indices...")
+    print("  Fetching ONS PIPR rental price indices (PIPR historical series)...")
 
-    # Method 1: Download the full IPHRP Excel from the ONS bulletin
+    df = None
+
+    # Method 1: Scrape ONS dataset page for latest Excel URL
     try:
-        df = _fetch_iphrp_bulletin()
-        print(f"  Source: ONS IPHRP bulletin Excel ({len(df)} rows)")
+        url = _find_latest_pipr_url()
+        df  = _download_and_parse_pipr(url)
+        print(f"  Source: ONS PIPR historical series Excel ({len(df)} rows)")
     except Exception as e:
-        print(f"  Bulletin download failed ({e}). Trying individual series (with delays)...")
-        df = _fetch_iphrp_individual_series()
+        print(f"  Latest URL scrape failed ({e}). Trying known direct URL...")
+
+    # Method 2: Fallback to known March 2025 direct URL
+    if df is None:
+        try:
+            df = _download_and_parse_pipr(_PIPR_DIRECT_URL)
+            print(f"  Source: ONS PIPR direct URL ({len(df)} rows)")
+        except Exception as e:
+            print(f"  Direct URL failed ({e}). Using placeholder data.")
+            df = _rental_index_placeholder()
 
     df = df[df["date"].dt.year >= _START_YEAR].reset_index(drop=True)
 
@@ -88,26 +136,54 @@ def fetch_ons_rental_index(save: bool = True) -> pd.DataFrame:
         path = DATA_RAW / f"ons_rental_index_{datetime.today():%Y%m}.csv"
         df.to_csv(path, index=False)
         print(f"  Saved {len(df):,} rows → {path.name}")
+        from src.ingestion.release_metadata import write_release_metadata
+        write_release_metadata(
+            series="ons_rental_index",
+            raw_file_path=path,
+            source_url=_PIPR_DATASET_PAGE,
+            publication_lag_months_estimated=1,
+            df=df,
+        )
 
     return df
 
 
 def fetch_ons_rental_levels(save: bool = True) -> pd.DataFrame:
     """
-    Fetch ONS Private Rental Market Statistics — median monthly rents by region.
-    Used alongside house prices to compute gross rental yield.
+    Construct a monthly regional rent level series (£/month) for 2005–present.
+
+    Method:
+      1. Scrape the ONS PRMS page to get the latest cross-sectional median rent
+         by English region (one observation per semi-annual release, ~Oct 2022-Sep 2023).
+      2. Use this as an anchor rent level at a known reference date.
+      3. Backcast / project using the PIPR rental price INDEX:
+            rent(t) = anchor_rent × (PIPR_index(t) / PIPR_index(anchor_date))
+      This produces a methodologically sound monthly time series from 2005 to present.
+
+    PRMS covers England regions only. Scotland, Wales, NI use ONS PIPR-based backcasts
+    anchored to approximate 2023 rent levels from respective national statistics.
 
     Returns:
         DataFrame with columns: date, region, median_monthly_rent
     """
-    print("  Fetching ONS PRMS median rent levels...")
+    print("  Fetching ONS PRMS median rent levels (PIPR-anchored time series)...")
 
-    try:
-        url = _find_prms_download_url()
-        df  = _download_and_parse_prms(url)
-    except Exception as e:
-        print(f"  PRMS download failed ({e}). Using rental index proxy.")
+    # Step 1: Load the PIPR index (already fetched — or fetch it now)
+    pipr = _load_pipr_index()
+    if pipr is None or pipr.empty:
+        print("  PIPR index unavailable. Using placeholder.")
         df = _rental_level_placeholder()
+    else:
+        # Step 2: Get anchor rents from the latest PRMS release
+        anchor_rents = _fetch_prms_anchor_rents()
+        if not anchor_rents:
+            print("  PRMS anchor fetch failed. Using placeholder.")
+            df = _rental_level_placeholder()
+        else:
+            # Step 3: Backcast via PIPR index
+            df = _backcast_rent_levels(pipr, anchor_rents)
+            print(f"  PIPR-anchored time series: {len(df)} rows "
+                  f"({df['date'].min():%Y-%m} → {df['date'].max():%Y-%m})")
 
     df = df[df["date"].dt.year >= _START_YEAR]
     df = df.sort_values(["region", "date"]).reset_index(drop=True)
@@ -116,6 +192,14 @@ def fetch_ons_rental_levels(save: bool = True) -> pd.DataFrame:
         path = DATA_RAW / f"ons_rental_levels_{datetime.today():%Y%m}.csv"
         df.to_csv(path, index=False)
         print(f"  Saved {len(df):,} rows → {path.name}")
+        from src.ingestion.release_metadata import write_release_metadata
+        write_release_metadata(
+            series="ons_rental_levels",
+            raw_file_path=path,
+            source_url=_PRMS_PAGE,
+            publication_lag_months_estimated=6,
+            df=df,
+        )
 
     return df
 
@@ -152,173 +236,126 @@ def compute_rental_yield(
         path = DATA_RAW / f"rental_yield_{datetime.today():%Y%m}.csv"
         merged.to_csv(path, index=False)
         print(f"  Computed yield saved → {path.name}")
+        from src.ingestion.release_metadata import write_release_metadata
+        write_release_metadata(
+            series="rental_yield",
+            raw_file_path=path,
+            source_url="derived:ons_rental_levels+land_registry_hpi",
+            publication_lag_months_estimated=6,
+            df=merged,
+        )
 
     return merged.reset_index(drop=True)
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
-def _fetch_iphrp_bulletin() -> pd.DataFrame:
+def _find_latest_pipr_url() -> str:
     """
-    Download the ONS IPHRP data Excel from the bulletin release page.
-    The bulletin is published monthly and includes all regional series.
+    Scrape the ONS PIPR dataset page for the most recent Excel download link.
+    The first /file?uri= link on the page is always the most recent release.
     """
-    import re
-    from bs4 import BeautifulSoup
-
-    # The bulletin index page
-    bulletin_url = (
-        "https://www.ons.gov.uk/economy/inflationandpriceindices/"
-        "bulletins/indexofprivatehousingrentalprices/previousReleases"
-    )
-    # Also try the latest release directly
-    latest_url = (
-        "https://www.ons.gov.uk/economy/inflationandpriceindices/"
-        "bulletins/indexofprivatehousingrentalprices/latest"
-    )
-
-    excel_url = None
-    for page_url in [latest_url, bulletin_url]:
-        try:
-            r = requests.get(page_url, headers=_HEADERS, timeout=15)
-            if r.status_code != 200:
-                continue
-            soup = BeautifulSoup(r.text, "lxml")
-            for a in soup.find_all("a", href=True):
-                href = a["href"]
-                if re.search(r"\.(xls|xlsx)$", href, re.IGNORECASE):
-                    if "iphrp" in href.lower() or "rental" in href.lower() or "private" in href.lower():
-                        excel_url = href if href.startswith("http") else "https://www.ons.gov.uk" + href
-                        break
-            if excel_url:
-                break
-        except Exception:
-            continue
-
-    if not excel_url:
-        raise ValueError("Could not find IPHRP Excel download link on ONS bulletin page")
-
-    r = requests.get(excel_url, headers=_HEADERS, timeout=60)
+    r = requests.get(_PIPR_DATASET_PAGE, headers=_HEADERS, timeout=15)
     r.raise_for_status()
-    return _parse_iphrp_excel(io.BytesIO(r.content))
+
+    soup = BeautifulSoup(r.text, "html.parser")
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        if "file?uri" in href and "priceindexofprivaterents" in href.lower():
+            return "https://www.ons.gov.uk" + href if not href.startswith("http") else href
+
+    raise ValueError("No PIPR Excel link found on ONS dataset page")
 
 
-def _parse_iphrp_excel(content: io.BytesIO) -> pd.DataFrame:
-    """Parse the ONS IPHRP Excel workbook into long format."""
-    import re
-    sheets = pd.read_excel(content, sheet_name=None, header=None)
+def _download_and_parse_pipr(url: str) -> pd.DataFrame:
+    """
+    Download the PIPR historical series Excel and parse Table 1.
 
-    _REGION_SHEET_MAP = {
-        "United Kingdom": "UK",
-        "England":        "England",
-        "London":         "London",
-        "South East":     "South East",
-        "East of England":"East of England",
-        "South West":     "South West",
-        "East Midlands":  "East Midlands",
-        "West Midlands":  "West Midlands",
-        "Yorkshire and The Humber": "Yorkshire",
-        "North West":     "North West",
-        "North East":     "North East",
-        "Wales":          "Wales",
-        "Scotland":       "Scotland",
-    }
+    Table 1 structure (March 2025 release):
+      Row 0: title
+      Row 1: accessibility note
+      Row 2: region names (United Kingdom, Great Britain, England, Wales, ...)
+      Row 3: region codes
+      Row 4+: monthly data — col 0 = datetime, cols 1+ = index values or [x]
+    """
+    r = requests.get(url, headers=_HEADERS, timeout=90)
+    r.raise_for_status()
 
+    raw = pd.read_excel(io.BytesIO(r.content), sheet_name="Table 1", header=None)
+
+    # Find the region-name header row: first row where col 1 contains a known region
+    header_row_idx = None
+    for i in range(min(10, len(raw))):
+        vals = raw.iloc[i].astype(str).str.strip().tolist()
+        if any(v in _PIPR_REGION_MAP for v in vals):
+            header_row_idx = i
+            break
+
+    if header_row_idx is None:
+        raise ValueError(
+            f"No region header row found in PIPR Excel. "
+            f"First row: {raw.iloc[0].tolist()[:5]}"
+        )
+
+    header_row = raw.iloc[header_row_idx].astype(str).str.strip().tolist()
+
+    # Build column index → model region name mapping
+    # Also handle truncated names (e.g. "East" → "East of England")
+    col_region = {}
+    for col_idx, name in enumerate(header_row):
+        mapped = _PIPR_REGION_MAP.get(name)
+        # Prefix match removed — explicit "East" entry in _PIPR_REGION_MAP handles truncation
+        if mapped and mapped in _REGIONS:
+            col_region[col_idx] = mapped
+
+    if not col_region:
+        raise ValueError(
+            f"No recognised region columns found in PIPR Excel. "
+            f"Header row: {header_row[:10]}"
+        )
+
+    # Data starts two rows after the header (skip header + codes row)
+    data_start = header_row_idx + 2
     records = []
-    for region, keyword in _REGION_SHEET_MAP.items():
-        # Find sheet whose name contains the keyword
-        sheet = next((k for k in sheets if keyword.lower() in k.lower()), None)
-        if not sheet:
+    for _, row in raw.iloc[data_start:].iterrows():
+        date_val = row.iloc[0]
+        if pd.isna(date_val):
             continue
-        try:
-            raw = sheets[sheet]
-            # Find column with month dates and column with index values
-            for row_idx in range(min(10, len(raw))):
-                row = raw.iloc[row_idx]
-                date_col = next((i for i, v in enumerate(row) if
-                                 isinstance(v, str) and re.match(r"(Jan|Feb|Mar)", str(v))), None)
-                if date_col is not None:
-                    break
 
-            if date_col is None:
+        # Dates in PIPR Excel are already datetime objects
+        try:
+            date = pd.Timestamp(date_val)
+        except Exception:
+            date = pd.to_datetime(str(date_val), errors="coerce")
+        if pd.isna(date):
+            continue
+
+        for col_idx, region in col_region.items():
+            val_raw = row.iloc[col_idx]
+            # Skip "[x]" (not available) and NaN entries
+            if pd.isna(val_raw) or str(val_raw).strip() in ("[x]", ""):
+                continue
+            try:
+                val = float(str(val_raw).replace(",", ""))
+                records.append({"date": date, "region": region, "rental_index": val})
+            except (ValueError, TypeError):
                 continue
 
-            dates  = raw.iloc[row_idx:, date_col]
-            values = raw.iloc[row_idx:, date_col + 1]
-
-            df = pd.DataFrame({"date_str": dates, "value": values})
-            df["date"]  = pd.to_datetime(df["date_str"].astype(str), format="%b %Y", errors="coerce")
-            df["value"] = pd.to_numeric(df["value"], errors="coerce")
-            df = df.dropna(subset=["date", "value"])
-            df["region"] = region
-            records.append(df[["date", "region", "value"]])
-        except Exception:
-            continue
-
     if not records:
-        raise ValueError("Could not parse any regional series from IPHRP Excel")
+        raise ValueError("No data rows parsed from PIPR historical series Excel")
 
-    out = pd.concat(records, ignore_index=True)
-    return out.rename(columns={"value": "rental_index"}).sort_values(["region", "date"])
-
-
-def _fetch_iphrp_individual_series() -> pd.DataFrame:
-    """
-    Fallback: fetch individual IPHRP series from ONS generator with long delays.
-    """
-    from src.ingestion.ons import _fetch_generator
-
-    # Updated series codes (verified against ONS website structure)
-    _SERIES_UPDATED = {
-        "United Kingdom": "/economy/inflationandpriceindices/timeseries/czom/iphrp",
-        "England":        "/economy/inflationandpriceindices/timeseries/czoo/iphrp",
-        "London":         "/economy/inflationandpriceindices/timeseries/czox/iphrp",
-        "South East":     "/economy/inflationandpriceindices/timeseries/czoy/iphrp",
-        "East of England":"/economy/inflationandpriceindices/timeseries/czoz/iphrp",
-        "South West":     "/economy/inflationandpriceindices/timeseries/czpa/iphrp",
-        "East Midlands":  "/economy/inflationandpriceindices/timeseries/czpb/iphrp",
-        "West Midlands":  "/economy/inflationandpriceindices/timeseries/czpc/iphrp",
-        "Yorkshire and The Humber": "/economy/inflationandpriceindices/timeseries/czpd/iphrp",
-        "North West":     "/economy/inflationandpriceindices/timeseries/czpe/iphrp",
-        "North East":     "/economy/inflationandpriceindices/timeseries/czpf/iphrp",
-        "Wales":          "/economy/inflationandpriceindices/timeseries/czpg/iphrp",
-        "Scotland":       "/economy/inflationandpriceindices/timeseries/czph/iphrp",
-    }
-
-    records = []
-    for region, uri in _SERIES_UPDATED.items():
-        if region not in _REGIONS and region not in ("United Kingdom", "England"):
-            continue
-        try:
-            time.sleep(3)  # respect ONS rate limits
-            df = _fetch_generator(uri, freq="monthly")
-            df["region"] = region
-            records.append(df)
-        except Exception as e:
-            print(f"    {region}: {e}")
-
-    if not records:
-        print("  All IPHRP series failed. Using approximate placeholder data.")
-        return _rental_index_placeholder()
-
-    out = pd.concat(records, ignore_index=True)
-    out = out.rename(columns={"value": "rental_index"})
-    return out[out["region"].isin(_REGIONS)].sort_values(["region", "date"]).reset_index(drop=True)
+    df = pd.DataFrame(records)
+    return df.sort_values(["region", "date"]).reset_index(drop=True)
 
 
 def _rental_index_placeholder() -> pd.DataFrame:
-    """Approximate IPHRP index (2015=100) using known UK rental growth rates."""
-    # UK private rental growth approx: ~3% p.a. pre-2021, ~8-10% p.a. 2022-23
-    dates  = pd.date_range("2000-01-01", "2026-01-01", freq="MS")
-    rows   = []
+    """
+    Approximate PIPR index (Jan 2015=100) using known UK rental growth rates.
+    Only used when both ONS download methods fail.
+    """
+    dates = pd.date_range("2000-01-01", "2026-01-01", freq="MS")
+    rows  = []
     for region in _REGIONS:
-        index = 100.0
-        for d in sorted(dates, reverse=True):
-            # Reverse engineer from 2015=100
-            pass
-        # Simple reconstruction: 2015=100, grow at approximate rates
-        index_val = 100.0
-        ref_date  = pd.Timestamp("2015-01-01")
         for d in dates:
             months_from_ref = (d.year - 2015) * 12 + (d.month - 1)
             if d < pd.Timestamp("2022-01-01"):
@@ -330,80 +367,176 @@ def _rental_index_placeholder() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _find_prms_download_url() -> str:
-    """Scrape the ONS PRMS page for the latest Excel/CSV download link."""
-    r = requests.get(_PRMS_PAGE, headers=_HEADERS, timeout=15)
-    r.raise_for_status()
-
-    soup = BeautifulSoup(r.text, "lxml")
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-        if re.search(r"\.(xls|xlsx|csv)$", href, re.IGNORECASE):
-            if "rental" in href.lower() or "prms" in href.lower() or "private" in href.lower():
-                if not href.startswith("http"):
-                    href = "https://www.ons.gov.uk" + href
-                return href
-
-    raise ValueError("Could not find PRMS download link on ONS page")
+def _load_pipr_index() -> pd.DataFrame:
+    """Load the PIPR rental index from disk (saved by fetch_ons_rental_index)."""
+    try:
+        candidates = sorted(DATA_RAW.glob("ons_rental_index_*.csv"), reverse=True)
+        if candidates:
+            df = pd.read_csv(candidates[0], parse_dates=["date"])
+            return df
+    except Exception:
+        pass
+    return None
 
 
-def _download_and_parse_prms(url: str) -> pd.DataFrame:
-    """Download and parse the ONS PRMS Excel file."""
-    r = requests.get(url, headers=_HEADERS, timeout=60)
-    r.raise_for_status()
+def _fetch_prms_anchor_rents() -> dict:
+    """
+    Download the latest ONS PRMS release and extract median monthly rent (£)
+    by English region. Returns {region: (anchor_date, median_rent)}.
 
-    sheets = pd.read_excel(io.BytesIO(r.content), sheet_name=None, header=None)
-    records = []
+    PRMS structure (Table 1.1): cross-sectional snapshot for one period.
+    Row 6 = header (Area Code, Region, Count, Mean, LQ, Median, UQ).
+    Rows 7+ = regions (ENGLAND, NORTH EAST, ...).
+    Region names are UPPER CASE.
+    Anchor date = midpoint of the published period (scrape from filename/page).
+    """
+    try:
+        r = requests.get(_PRMS_PAGE, headers=_HEADERS, timeout=15)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
 
-    for sheet_name, raw in sheets.items():
-        raw = raw.dropna(how="all").reset_index(drop=True)
+        # Get the first (most recent) .xls/.xlsx link
+        prms_url = None
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            if isinstance(href, list):
+                href = href[0]
+            href = str(href)
+            if "file?uri" in href and re.search(r"\.xlsx?$", href, re.IGNORECASE):
+                if "privaterentalmarket" in href.lower():
+                    prms_url = "https://www.ons.gov.uk" + href
+                    break
 
-        # Find the header row with year/quarter dates
+        if not prms_url:
+            raise ValueError("No PRMS Excel link found")
+
+        # Extract period from URL to set anchor date
+        # e.g. "october2022toseptember2023" → anchor = April 2023 (midpoint)
+        period_match = re.search(
+            r"(\w+)(\d{4})to(\w+)(\d{4})", prms_url, re.IGNORECASE
+        )
+        if period_match:
+            end_month_str = period_match.group(3)[:3].capitalize()
+            end_year      = int(period_match.group(4))
+            anchor_date   = pd.to_datetime(f"{end_month_str} {end_year}", format="%b %Y")
+        else:
+            anchor_date = pd.Timestamp("2023-03-01")   # safe fallback
+
+        r2 = requests.get(prms_url, headers=_HEADERS, timeout=60)
+        r2.raise_for_status()
+
+        raw = pd.read_excel(io.BytesIO(r2.content), sheet_name="Table 1.7", header=None)
+
+        # Find header row: contains "Median" or "Region"
         header_row = None
-        for i, row in raw.iterrows():
-            vals = [str(v) for v in row.tolist()]
-            if sum(1 for v in vals if re.match(r"\d{4}", v)) > 3:
+        for i in range(min(15, len(raw))):
+            vals = raw.iloc[i].astype(str).str.strip().tolist()
+            if "Median" in vals or "Region" in vals:
                 header_row = i
                 break
 
         if header_row is None:
+            raise ValueError("Header row not found in PRMS Table 1.1")
+
+        headers  = [str(v).strip() if pd.notna(v) else "" for v in raw.iloc[header_row].tolist()]
+        # Prefer exact "Region" column over "Area Code" columns
+        region_c = next((i for i, h in enumerate(headers) if h == "Region"), None)
+        if region_c is None:
+            region_c = next(i for i, h in enumerate(headers) if "Region" in h or "Area" in h)
+        median_c = next(i for i, h in enumerate(headers) if "Median" in h)
+
+        anchors = {}
+        for _, row in raw.iloc[header_row + 1:].iterrows():
+            region_raw = str(row.iloc[region_c]).strip()
+            mapped     = _PIPR_REGION_MAP.get(region_raw) or _PIPR_REGION_MAP.get(region_raw.title())
+            if not mapped or mapped not in _REGIONS:
+                # Try upper-case lookup
+                mapped = _PIPR_REGION_MAP.get(region_raw.upper())
+                if not mapped:
+                    continue
+            val_raw = str(row.iloc[median_c]).replace(",", "").strip()
+            try:
+                rent = float(val_raw)
+                if rent > 0:
+                    anchors[mapped] = (anchor_date, rent)
+            except (ValueError, TypeError):
+                continue
+
+        return anchors
+
+    except Exception as e:
+        print(f"  PRMS anchor fetch failed ({e})")
+        return {}
+
+
+def _backcast_rent_levels(pipr: pd.DataFrame, anchor_rents: dict) -> pd.DataFrame:
+    """
+    Construct a monthly rent level series per region using:
+        rent(t) = anchor_rent × (PIPR_index(t) / PIPR_index(anchor_date))
+
+    For regions not in anchor_rents (Scotland, Wales, NI), approximate 2023
+    anchor rents are used from national housing statistics.
+    """
+    # Approximate 2023 median monthly rents for nations not in PRMS (England-only)
+    _NATION_ANCHORS_2023 = {
+        "Scotland":         pd.Timestamp("2023-03-01"),
+        "Wales":            pd.Timestamp("2023-03-01"),
+        "Northern Ireland": pd.Timestamp("2023-03-01"),
+    }
+    _NATION_RENTS_2023 = {
+        "Scotland":         925,   # ONS PIPR / Scottish Government 2022-23
+        "Wales":            750,   # StatsWales 2022-23
+        "Northern Ireland": 750,   # NIHE Private Rental Panel 2022-23
+    }
+
+    records = []
+    for region in _REGIONS:
+        region_pipr = pipr[pipr["region"] == region].set_index("date")["rental_index"]
+        if region_pipr.empty:
             continue
 
-        raw.columns = raw.iloc[header_row].astype(str).str.strip()
-        raw = raw.iloc[header_row + 1:].reset_index(drop=True)
-
-        region_col  = raw.columns[0]
-        date_cols   = [c for c in raw.columns if re.match(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)", str(c))]
-
-        if len(date_cols) < 4:
+        if region in anchor_rents:
+            anchor_date, anchor_rent = anchor_rents[region]
+        elif region in _NATION_ANCHORS_2023:
+            anchor_date = _NATION_ANCHORS_2023[region]
+            anchor_rent = _NATION_RENTS_2023[region]
+        else:
             continue
 
-        df = raw[[region_col] + date_cols].copy()
-        df = df.rename(columns={region_col: "region"})
-        df["region"] = df["region"].astype(str).str.strip()
+        # Snap anchor_date to nearest available PIPR date
+        anchor_date = pd.Timestamp(anchor_date).to_period("M").to_timestamp()
+        if anchor_date not in region_pipr.index:
+            nearest = region_pipr.index[
+                abs(region_pipr.index - anchor_date).argmin()
+            ]
+            anchor_date = nearest
 
-        # Keep only target regions
-        df = df[df["region"].isin(_REGIONS)]
-        if df.empty:
+        anchor_index = region_pipr.get(anchor_date)
+        if anchor_index is None:
+            continue
+        # Handle duplicate dates returning a Series
+        if hasattr(anchor_index, "__len__"):
+            anchor_index = float(anchor_index.iloc[0])
+        else:
+            anchor_index = float(anchor_index)
+        if anchor_index == 0:
             continue
 
-        df = df.melt(id_vars="region", var_name="date_str", value_name="median_monthly_rent")
-        df["median_monthly_rent"] = pd.to_numeric(df["median_monthly_rent"], errors="coerce")
-        df["date"] = pd.to_datetime(df["date_str"], format="%b %Y", errors="coerce")
-        df = df.dropna(subset=["date", "median_monthly_rent"])
-        records.append(df[["date", "region", "median_monthly_rent"]])
+        for date, idx in region_pipr.items():
+            rent = anchor_rent * (idx / anchor_index)
+            records.append({
+                "date": date,
+                "region": region,
+                "median_monthly_rent": round(rent, 2),
+            })
 
-    if not records:
-        raise ValueError("No parseable regional rent data found in PRMS file")
-
-    return pd.concat(records, ignore_index=True)
+    return pd.DataFrame(records)
 
 
 def _rental_level_placeholder() -> pd.DataFrame:
     """
     Placeholder when PRMS download fails.
-    Uses rough 2015 median rents scaled by IPHRP index.
-    Approximate 2015 median monthly rents (ONS PRMS):
+    Uses approximate 2015 median rents (ONS PRMS) with 1% p.a. real growth.
     """
     _BASE_RENTS_2015 = {
         "London":                   1500,
@@ -423,7 +556,6 @@ def _rental_level_placeholder() -> pd.DataFrame:
     rows  = []
     for region, base_rent in _BASE_RENTS_2015.items():
         for d in dates:
-            # Very rough: 1% real annual growth
             years_from_2015 = (d.year - 2015) + (d.month - 1) / 12
             rent = base_rent * (1.01 ** years_from_2015)
             rows.append({"date": d, "region": region, "median_monthly_rent": round(rent, 0)})

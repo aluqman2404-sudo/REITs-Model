@@ -71,6 +71,14 @@ def fetch_boe_rate(save: bool = True) -> pd.DataFrame:
         path = DATA_RAW / f"boe_base_rate_{datetime.today():%Y%m}.csv"
         df.to_csv(path, index=False)
         print(f"  Saved {len(df):,} rows → {path.name}")
+        from src.ingestion.release_metadata import write_release_metadata
+        write_release_metadata(
+            series="boe_base_rate",
+            raw_file_path=path,
+            source_url=_BOE_IADB_URL,
+            publication_lag_months_estimated=0,
+            df=df,
+        )
 
     return df
 

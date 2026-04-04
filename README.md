@@ -1,62 +1,89 @@
-# UK Housing Market Model
+# UK Regional Housing Market Model — v0.2.0
 
-Research-grade prototype for regional UK housing analysis. The project combines:
+A research-grade stochastic simulation platform for UK residential property across 12 regions. Built for systematic fair-value research and long-horizon scenario analysis by institutional investors and REIT analysts.
 
-- Stage 2 ingestion of housing and macro inputs
-- Stage 3 cleaning and panel assembly
-- Stage 4 OLS-based calibration
-- Stage 5 stochastic simulation
-- Stage 6 regional scoring
-- Stage 7 Streamlit delivery for consumer and REIT users
+> **Disclaimer:** This model is a historical research prototype. It does not constitute regulated financial advice, investment recommendations, or a stress-testing model as defined under PRA SS3/18.
 
-The current app is designed as a reviewable research dashboard, not a trading system and not financial advice.
+---
 
-## Current Stage 4/5 assessment
+## Documentation
 
-The canonical rebuild is materially stronger than the earlier Stage 4 and Stage 5 artifacts, but the model is **still not fully signed-off bank-grade**.
+| Document | Description |
+|---|---|
+| [Technical Report (PDF)](./docs/UK_Housing_Model_Report.pdf) | Full mathematical derivations, calibrated parameters, validation results, governance framework |
+| [Technical Report (LaTeX source)](./docs/UK_Housing_Model_Report.tex) | Source for the PDF above |
+| [Model Validation Summary](./docs/MODEL_VALIDATION_SUMMARY.md) | Sign-off results, backtesting, sensitivity analysis, CI coverage |
+| [UI Section Guide](./docs/UI_SECTION_GUIDE.pdf) | Page-by-page dashboard documentation |
+| [Sign-Off Checklist](./SIGN_OFF_CHECKLIST.md) | 9/9 governance areas — all APPROVED (2026-04-02) |
+| [Model Risk Register](./MODEL_RISK_REGISTER.csv) | 26-item risk register with statuses |
+| [Model Limitations](./MODEL_LIMITATIONS.md) | 8 documented material limitations |
+| [Build Manifest](./BUILD_MANIFEST.md) | Authoritative build path and canonical pipeline |
+| [Assumptions Register](./ASSUMPTIONS_REGISTER.md) | Full list of modelling assumptions |
+| [Scoring Backtest Note](./SCORING_BACKTEST_NOTE.md) | Label governance and scoring calibration |
+| [Signal Definitions](./SIGNAL_COMPONENT_DEFINITIONS.md) | C1/C2/Yield/Tail component definitions |
+| [Interpolated Feature Policy](./INTERPOLATED_FEATURE_POLICY.md) | Earnings staleness and interpolation policy |
 
-Main reasons:
+---
 
-- forecast edge over naive baselines is real but still moderate
-- expensive southern regions remain conservative in long-horizon baseline simulations
-- the valuation anchor is still a transparent heuristic rather than a full structural model
-- the scoring layer remains decision-support research logic rather than a backtested rule engine
+## Model at a Glance
 
-See [`STAGE4_STAGE5_ASSESSMENT.md`](./STAGE4_STAGE5_ASSESSMENT.md) for the detailed review.
-See [`MODEL_UPGRADE_REPORT.md`](./MODEL_UPGRADE_REPORT.md) for the latest backend upgrade summary.
+- **Regions:** 12 (all English regions + Wales, Scotland, Northern Ireland)
+- **Data sources:** Land Registry HPI, Bank of England, ONS, HMRC
+- **Panel:** 2005–2025, monthly, 2,532 rows × 41 columns
+- **Simulation:** Log Ornstein-Uhlenbeck, 10,000 paths × 5 scenarios × 12 regions = 600,000 paths
+- **Horizon:** 5 years (60 monthly Euler-Maruyama steps)
+- **Validation status:** APPROVED — 9/9 sign-off areas complete
 
-## What changed in the Stage 7 completion pass
+### Key validation results
 
-- Added a canonical typed config layer in [`src/core/config.py`](./src/core/config.py)
-- Added portable path helpers, structured logging, and dataset validation
-- Implemented previously stubbed canonical simulation and scoring helpers
-- Added validated dashboard loaders that build app-ready Stage 7 cache files
-- Rebuilt the Streamlit app around shared view modules instead of page-local logic
-- Added tests for data loading, simulation reproducibility, scoring, and Stage 7 smoke coverage
-- Added deployment assets for Streamlit Cloud and Docker
-- Documented assumptions, limitations, and the Stage 1-6 audit
+| Test | Result | Status |
+|---|---|---|
+| OLS replay deviation | 0.000 | PASS |
+| Subsample directional accuracy (12m) | 64.7% | PASS (threshold 55%) |
+| Model horse race — Log-OU vs GBM RMSE (12m) | 0.044 vs 0.049 | Log-OU wins |
+| CI coverage (pooled, holdout 2018–2026) | 78.7% | MARGINAL |
+| Information ratio (36m) | 63.1% | PASS (threshold 55%) |
 
-## Canonical project structure
+---
 
-```text
-housing_model/
-├── app/                    # Thin Streamlit page wrappers and assets
-├── config/                 # JSON config and schema references
-├── data/
-│   ├── processed/          # Cleaned panel datasets
-│   └── outputs/            # Stage 4-7 outputs
-├── src/
-│   ├── core/               # Config, paths, logging, validation
-│   ├── ingestion/          # Source-specific ingestion modules
-│   ├── cleaning/           # Cleaning and feature engineering
-│   ├── model/              # Historical Stage 4-6 research scripts
-│   ├── scoring/            # Canonical scoring helpers
-│   ├── simulation/         # Canonical interactive simulation helper
-│   └── ui/                 # Validated loaders, charts, explainers, views
-└── tests/                  # Critical-path automated tests
+## Seven-Stage Pipeline
+
+```
+Stage 1  Ingestion      Land Registry, BoE, ONS, HMRC raw data fetch and cache
+Stage 2  Cleaning       Harmonise, interpolate, construct monthly panel
+Stage 3  Feature eng.   Multicollinearity diagnostics, lagged macro features
+Stage 4  OLS calib.     Fair-value layer + OU parameters (κ, σ, γ) per region
+Stage 5  Simulation     10,000-path Euler-Maruyama per region per scenario
+Stage 6  Scoring        Consumer and REIT composite scores
+Stage 7  Dashboard      Streamlit research UI — 8 pages, 12 regions
 ```
 
-## Environment setup
+---
+
+## Project Structure
+
+```
+housing_model/
+├── docs/                   # Technical report, validation summary, UI guide
+├── config/                 # parameters.json, data_schema.json, settings
+├── src/
+│   ├── core/               # Config, paths, logging, validation
+│   ├── ingestion/          # Land Registry, BoE, ONS, HMRC ingestion
+│   ├── cleaning/           # Panel construction and feature engineering
+│   ├── model/              # OLS, OU estimation, validation, canonical rebuild
+│   ├── scoring/            # Scoring engine and backtest
+│   ├── simulation/         # SDE and Euler-Maruyama
+│   └── ui/                 # Streamlit app, charts, loaders, views
+├── tests/                  # 50 tests — governance, freshness, scoring, smoke
+├── SIGN_OFF_CHECKLIST.md
+├── MODEL_RISK_REGISTER.csv
+├── MODEL_LIMITATIONS.md
+└── requirements.txt
+```
+
+---
+
+## Setup
 
 ```bash
 cd housing_model
@@ -67,145 +94,52 @@ pip install -r requirements.txt
 
 ## Run the app
 
-Preferred:
-
-```bash
-./run_app.sh
-```
-
-Equivalent direct command:
-
 ```bash
 streamlit run src/ui/app.py
 ```
 
-## Rebuild Stage 7 cache files
-
-The Stage 7 app reads validated Stage 1-6 outputs and writes app-ready cache files to `data/outputs/stage7/`.
-
-```bash
-python -m src.ui.build_dashboard_cache
-```
-
-Outputs:
-
-- `data/outputs/stage7/dashboard_metadata.json`
-- `data/outputs/stage7/region_snapshot.csv`
-
-## Build the enriched Stage 4-ready panel
-
-The richer Stage 2/3 panel is stored in `data/processed/master_dataset_v2.csv`. To export the canonical Stage 4-ready input:
-
-```bash
-python -m src.data.export_stage4_ready_panel
-```
-
-Outputs:
-
-- `data/processed/ols_ready_dataset_v2.csv`
-- `data/outputs/stage3/stage4_ready_panel_metadata.json`
-
-## Rebuild the canonical Stage 4-6 artifacts
-
-To regenerate the preferred model outputs used by the dashboard:
+## Rebuild canonical model outputs
 
 ```bash
 python -m src.model.canonical_rebuild
 ```
 
-Outputs:
-
-- `data/outputs/stage4_final/sde_parameters_bankgrade.csv`
-- `data/outputs/stage4_final/canonical_stage4_diagnostics.csv`
-- `data/outputs/stage5c/simulation_summary_bankgrade.csv`
-- `data/outputs/stage6/stage7_handoff_bankgrade.csv`
-- `data/outputs/stage6/canonical_rebuild_metadata.json`
-
 ## Run the validation pack
-
-To benchmark the rebuilt model against simple baselines and inspect stability:
 
 ```bash
 python -m src.model.validation_pack
 ```
 
-Outputs:
-
-- `data/outputs/validation/forecast_benchmark_overall.csv`
-- `data/outputs/validation/forecast_benchmark_by_region.csv`
-- `data/outputs/validation/coefficient_stability.csv`
-- `data/outputs/validation/simulation_plausibility.csv`
-- `data/outputs/validation/validation_summary.md`
-
-## Test suite
+## Run tests
 
 ```bash
 pytest tests -q
 ```
 
-Coverage focus:
-
-- dashboard data integrity
-- simulation reproducibility
-- score range bounds
-- Stage 7 page smoke tests
-- stamp duty utility logic
-
-## Data and methodology summary
-
-- The app is anchored to the processed panel and Stage 4/5/6 artifacts already present in `data/outputs/`.
-- The dashboard prefers `master_dataset_v2.csv` because it contains the richer Stage 2/3 explanatory set.
-- The dashboard prefers the rebuilt `*_bankgrade.csv` Stage 4/5/6 artifacts when they are present and validated.
-- Stage 4 provides region-level `kappa`, `sigma`, and equilibrium price estimates.
-- Stage 5 provides scenario summaries used for ranking and downside context.
-- Stage 6 provides regional consumer and REIT base scores.
-- The Stage 7 Scenario Lab does not re-estimate the econometrics. It perturbs calibrated parameters for transparent sensitivity analysis.
+---
 
 ## Deployment
 
-### Streamlit Community Cloud
+### Streamlit Community Cloud (free)
 
-1. Push the repository to GitHub.
-2. In Streamlit Cloud, create a new app from the repo.
-3. Set the main file to `src/ui/app.py`.
-4. Use Python 3.12.
-5. If private data access is later needed, configure secrets in the Streamlit UI rather than `.env`.
+1. Push this repo to GitHub.
+2. Go to [share.streamlit.io](https://share.streamlit.io) and sign in with GitHub.
+3. Click **New app** → select `REITs-Model` → branch `main` → main file `src/ui/app.py`.
+4. Click **Deploy**.
 
 ### Docker
 
-Build:
-
 ```bash
 docker build -t uk-housing-model .
-```
-
-Run:
-
-```bash
 docker run --rm -p 8501:8501 uk-housing-model
 ```
 
-The Docker entrypoint launches:
-
-```bash
-streamlit run src/ui/app.py --server.port=8501 --server.address=0.0.0.0
-```
-
-## Screenshot generation
-
-See [`docs/SCREENSHOT_GUIDE.md`](./docs/SCREENSHOT_GUIDE.md).
+---
 
 ## Important caveats
 
-- Scores are decision-support summaries, not fair-value truth.
-- The scoring date is tied to the available Stage 6 handoff, which currently reflects July 2023 starting conditions.
-- Regional averages are not substitutes for property-level underwriting.
-- Scenario Lab overrides are explicitly exploratory.
-
-## Additional documentation
-
-- [`AUDIT_STAGE1_TO_STAGE6.md`](./AUDIT_STAGE1_TO_STAGE6.md)
-- [`ASSUMPTIONS_REGISTER.md`](./ASSUMPTIONS_REGISTER.md)
-- [`MODEL_LIMITATIONS.md`](./MODEL_LIMITATIONS.md)
-- [`STAGE4_STAGE5_ASSESSMENT.md`](./STAGE4_STAGE5_ASSESSMENT.md)
-- [`STAGE7_COMPLETION_REPORT.md`](./STAGE7_COMPLETION_REPORT.md)
+- Scores are descriptive research labels (Supportive / Mixed / Cautious), not investment advice.
+- The model operates on regional averages — not applicable to individual properties.
+- Earnings data is interpolated annually; 13-month staleness as of April 2026.
+- The Scenario Lab applies coefficient-based perturbations, not a full econometric re-run.
+- See [Model Limitations](./MODEL_LIMITATIONS.md) for the full list.

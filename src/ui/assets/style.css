@@ -1,0 +1,73 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap");
+
+:root {
+    --ink: #132238;
+    --muted: #51606f;
+    --line: #d3dce5;
+    --panel: #f7f4ef;
+    --panel-strong: #efe8dd;
+    --accent: #12355b;
+}
+
+html, body, [class*="css"] {
+    font-family: "IBM Plex Sans", sans-serif;
+    color: var(--ink);
+}
+
+h1, h2, h3 {
+    font-family: "IBM Plex Serif", serif;
+    letter-spacing: -0.01em;
+}
+
+[data-testid="stAppViewContainer"] {
+    background:
+        radial-gradient(circle at top left, rgba(204, 219, 232, 0.42), transparent 32%),
+        linear-gradient(180deg, #fbfaf7 0%, #f5f1ea 100%);
+}
+
+[data-testid="metric-container"] {
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px 18px;
+    box-shadow: 0 6px 18px rgba(18, 53, 91, 0.06);
+}
+
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #12263f 0%, #183454 100%);
+}
+
+[data-testid="stSidebar"] * {
+    color: #eef4fa;
+}
+
+.stTabs [data-baseweb="tab-list"] {
+    gap: 0.4rem;
+}
+
+.stTabs [data-baseweb="tab"] {
+    background: rgba(255, 255, 255, 0.72);
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    padding: 0.45rem 0.9rem;
+}
+
+blockquote {
+    border-left: 4px solid var(--accent);
+    background: rgba(255, 255, 255, 0.75);
+    border-radius: 0 10px 10px 0;
+    padding: 0.8rem 1rem;
+    color: var(--muted);
+}
+
+[data-testid="stDataFrame"] {
+    background: rgba(255, 255, 255, 0.82);
+    border-radius: 12px;
+    border: 1px solid var(--line);
+}
+
+@media (max-width: 640px) {
+    [data-testid="column"] {
+        min-width: 100% !important;
+    }
+}

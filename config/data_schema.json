@@ -1,129 +1,115 @@
 {
-  "_comment": "Data dictionary for all variables in the master analytical dataset.",
-
+  "_comment": "Canonical schema references for the Stage 7 research dashboard.",
   "master_dataset": {
-    "description": "One row per (date, region) combination at monthly frequency.",
+    "description": "Monthly regional panel used by the model and dashboard.",
     "primary_key": ["date", "region"],
     "columns": {
       "date": {
         "type": "datetime",
         "frequency": "monthly (month-start)",
-        "source": "index",
         "example": "2010-01-01"
       },
       "region": {
         "type": "string",
-        "source": "ONS standard region name",
-        "example": "London",
-        "valid_values": [
-          "East Midlands", "East of England", "London", "North East",
-          "North West", "South East", "South West", "West Midlands",
-          "Yorkshire and The Humber", "Wales", "Scotland", "Northern Ireland"
-        ]
+        "description": "Standard UK region label used across the project."
       },
-      "house_price_nominal": {
+      "nominal_house_price": {
         "type": "float",
         "unit": "GBP",
-        "source": "HM Land Registry UK HPI",
-        "description": "Average house price in nominal terms",
-        "example": 285000.0
+        "description": "Regional average nominal house price."
       },
-      "house_price_real": {
+      "real_house_price": {
         "type": "float",
-        "unit": "GBP (base year 2015)",
-        "source": "Derived: house_price_nominal deflated by CPI",
-        "description": "Average house price in real (inflation-adjusted) terms",
-        "example": 241000.0
+        "unit": "GBP (real, CPI-adjusted)",
+        "description": "Inflation-adjusted regional average house price."
       },
-      "income_nominal": {
+      "hpi_index": {
         "type": "float",
-        "unit": "GBP annual",
-        "source": "ONS EARN01 — median weekly earnings * 52",
-        "description": "Median annual household income in nominal terms",
-        "example": 38000.0
+        "description": "HM Land Registry index level."
       },
-      "income_real": {
+      "price_to_income_ratio_derived": {
         "type": "float",
-        "unit": "GBP annual (base year 2015)",
-        "source": "Derived: income_nominal deflated by CPI",
-        "description": "Median annual household income in real terms",
-        "example": 32000.0
+        "unit": "ratio",
+        "description": "Derived affordability ratio from real prices and real earnings."
+      },
+      "price_to_income_ratio_official": {
+        "type": "float",
+        "unit": "ratio",
+        "description": "Official affordability ratio series, forward-filled to monthly."
+      },
+      "mortgage_rate": {
+        "type": "float",
+        "unit": "percent",
+        "description": "Representative mortgage rate used by the model."
       },
       "base_rate": {
         "type": "float",
-        "unit": "percentage points",
-        "source": "Bank of England official bank rate",
-        "description": "BoE base rate, forward-filled to monthly",
-        "example": 5.25
+        "unit": "percent",
+        "description": "Bank of England base rate, standardised to monthly."
       },
-      "cpi": {
+      "net_additions_monthly": {
         "type": "float",
-        "unit": "index (2015=100)",
-        "source": "ONS MM23",
-        "description": "Consumer Price Index used for real deflation",
-        "example": 118.4
+        "unit": "dwellings",
+        "description": "Interpolated housing supply measure."
+      },
+      "real_annual_earnings": {
+        "type": "float",
+        "unit": "GBP annual (real)",
+        "description": "CPI-deflated regional annual earnings."
+      },
+      "gross_yield_pct": {
+        "type": "float",
+        "unit": "percent",
+        "description": "Gross rental yield proxy."
+      },
+      "rental_index": {
+        "type": "float",
+        "description": "ONS rental index."
+      },
+      "real_monthly_rent": {
+        "type": "float",
+        "unit": "GBP monthly (real)",
+        "description": "CPI-deflated monthly rent proxy."
       },
       "population": {
         "type": "float",
         "unit": "persons",
-        "source": "ONS mid-year population estimates, interpolated to monthly",
-        "description": "Regional population estimate",
-        "example": 8900000.0
+        "description": "Interpolated regional population estimate."
       },
-      "price_income_ratio": {
+      "cpi": {
         "type": "float",
-        "unit": "ratio",
-        "source": "Derived: house_price_real / income_real",
-        "description": "Affordability proxy — higher = less affordable",
-        "example": 7.5
-      },
-      "affordability_index": {
-        "type": "float",
-        "unit": "index (0–100, higher = more affordable)",
-        "source": "Derived: percentile rank of price_income_ratio inverted",
-        "description": "Normalised affordability score for use in scoring engine",
-        "example": 32.0
-      },
-      "d_log_price": {
-        "type": "float",
-        "unit": "log difference (approx. monthly growth rate)",
-        "source": "Derived: log(house_price_real) - log(house_price_real.shift(1))",
-        "description": "Dependent variable for OLS regression in Stage 4",
-        "example": 0.004
+        "description": "Consumer Price Index used for deflation."
       }
     }
   },
-
-  "raw_sources": {
-    "land_registry": {
-      "file_pattern": "data/raw/land_registry_*.csv",
-      "key_columns": ["Date", "Region_Name", "Average_Price", "Index", "Sales_Volume"],
-      "date_format": "%Y-%m-%d",
-      "frequency": "monthly"
-    },
-    "ons_income": {
-      "file_pattern": "data/raw/ons_income_*.csv",
-      "key_columns": ["date", "region", "median_weekly_earnings"],
-      "date_format": "%Y-%m-%d",
-      "frequency": "quarterly — interpolated to monthly"
-    },
-    "boe_rate": {
-      "file_pattern": "data/raw/boe_base_rate.csv",
-      "key_columns": ["date", "base_rate"],
-      "date_format": "%d %b %y",
-      "frequency": "irregular — forward-filled to monthly"
-    },
-    "ons_cpi": {
-      "file_pattern": "data/raw/ons_cpi_*.csv",
-      "key_columns": ["date", "cpi"],
-      "date_format": "%Y-%m-%d",
-      "frequency": "monthly"
-    },
-    "ons_population": {
-      "file_pattern": "data/raw/ons_population_*.csv",
-      "key_columns": ["date", "region", "population"],
-      "date_format": "%Y",
-      "frequency": "annual — interpolated to monthly"
-    }
+  "stage4_parameters": {
+    "description": "Stage 4 region-level OLS-to-SDE calibration outputs.",
+    "required_columns": ["region", "kappa", "sigma", "mu_equilibrium", "gamma_annual_pp"]
+  },
+  "stage5_summary": {
+    "description": "Stage 5 simulation summary by region and scenario.",
+    "required_columns": [
+      "scenario",
+      "region",
+      "median_5yr_growth",
+      "p10_5yr_growth",
+      "p25_5yr_growth",
+      "p75_5yr_growth",
+      "p90_5yr_growth",
+      "prob_terminal_loss_10pct"
+    ]
+  },
+  "stage6_handoff": {
+    "description": "Stage 6 region-level score handoff for the Stage 7 app.",
+    "required_columns": [
+      "region",
+      "consumer_score",
+      "consumer_band",
+      "reit_score",
+      "reit_band",
+      "pct_above_pstar",
+      "wtd_return_consumer",
+      "p_terminal_loss_10_avg"
+    ]
   }
 }

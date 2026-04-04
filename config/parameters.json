@@ -1,9 +1,8 @@
 {
-  "_comment": "Central parameter store. OLS calibration (Stage 4) will overwrite the model section.",
-
+  "_comment": "Canonical runtime configuration for the historical UK housing research prototype.",
   "project": {
     "name": "UK Housing Market Model",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "base_year": 2000,
     "end_year": 2024,
     "date_frequency": "monthly",
@@ -22,70 +21,364 @@
       "Northern Ireland"
     ]
   },
-
-  "data_sources": {
-    "land_registry": {
-      "url": "https://www.gov.uk/government/statistical-data-sets/uk-house-price-index-data-downloads-august-2023",
-      "frequency": "monthly",
-      "notes": "HM Land Registry UK HPI — regional average prices"
-    },
-    "ons_income": {
-      "dataset_id": "EARN01",
-      "frequency": "quarterly",
-      "notes": "ONS median weekly earnings by region — interpolate to monthly"
-    },
-    "boe_base_rate": {
-      "url": "https://www.bankofengland.co.uk/boeapps/database/Bank-Rate.asp",
-      "frequency": "irregular",
-      "notes": "BoE official bank rate — forward-fill to monthly"
-    },
-    "ons_population": {
-      "dataset_id": "POP",
-      "frequency": "annual",
-      "notes": "ONS mid-year population estimates — interpolate to monthly"
-    },
-    "ons_cpi": {
-      "dataset_id": "MM23",
-      "frequency": "monthly",
-      "notes": "ONS CPI — used for nominal-to-real deflation"
-    }
+  "artifacts": {
+    "canonical_panel_file": "master_dataset_canonical.csv",
+    "stage4_parameters_file": "sde_parameters_bankgrade.csv",
+    "stage5_summary_file": "simulation_summary_bankgrade.csv",
+    "stage6_handoff_file": "stage7_handoff_bankgrade.csv",
+    "stage7_snapshot_file": "region_snapshot.csv",
+    "stage7_metadata_file": "dashboard_metadata.json"
   },
-
   "model": {
-    "sde_type": "ornstein_uhlenbeck",
-    "dt": 0.083333,
-    "n_simulations": 10000,
-    "drift_mu": null,
-    "mean_reversion_theta": null,
-    "diffusion_sigma": null,
-    "long_run_mean": null,
-    "_note": "Null values populated by OLS calibration in Stage 4"
+    "sde_type": "log_ornstein_uhlenbeck_terminal_target",
+    "dt": 0.0833333333,
+    "n_simulations": 10000
   },
-
+  "freshness": {
+    "historical_only": true,
+    "max_live_data_age_months": 12,
+    "stale_warning_months": 12,
+    "disclosure_text": "This dashboard is a historical research prototype. It does not provide current real-time UK housing advice because the harmonized house-price panel ends before the current date."
+  },
+  "fair_value": {
+    "anchor_months": [
+      6,
+      12
+    ],
+    "regressors": [
+      "log_income_asof",
+      "log_rent",
+      "mortgage_rate"
+    ],
+    "kappa_fallback_phi": 0.97,
+    "kappa_phi_upper_bound": 0.995,
+    "sigma_floor_annual": 0.025,
+    "sigma_cap_annual": 0.12,
+    "sigma_cap_overrides": {
+      "_note": "Per-region sigma cap overrides for _calibrate_sigma_by_region. Format: region_name -> annual_cap. Northern Ireland tested 2026-03-22 at cap=0.150 and cap=0.135 \u2014 median unchanged (42.38pp vs 42.30pp) confirming median is gamma/kappa-driven, not sigma-driven. No active overrides: the mechanism is available for future use. See R026."
+    },
+    "financial_stress_activation_threshold": 10.5,
+    "fair_value_pti_weight_estimated": 0.3,
+    "fair_value_pti_weight_method": "data_driven",
+    "_fair_value_weight_note": "PTI/PTR blend weight. Set to data-driven estimate when available. Falls back to 0.60/0.40 expert prior if estimation fails or result is outside [0.30, 0.70]."
+  },
+  "simulation": {
+    "baseline_target_weight": 0.65,
+    "baseline_volatility_blend": 0.65,
+    "stress_sigma_multiplier_cap": 1.6
+  },
+  "validation": {
+    "canonical_runner_name": "independent_validation_runner",
+    "forecast_horizons_months": [
+      1,
+      3
+    ],
+    "score_backtest_horizons_months": [
+      12,
+      36,
+      60
+    ]
+  },
+  "guardrails": {
+    "beta_rate_max": -1e-06,
+    "beta_financial_stress_max": -1e-06,
+    "beta_income_min": 0.0,
+    "beta_transaction_min": 1e-06,
+    "rho_max": -0.01,
+    "gamma_min_annual": -0.01,
+    "gamma_max_annual": 0.025,
+    "sigma_raw_weight": 0.35,
+    "sigma_winsor_weight": 0.65,
+    "kappa_fallback_mode": "median_stable_phi"
+  },
   "scoring": {
+    "_threshold_calibration_note": {
+      "calibration_date": "2026-03-21",
+      "panel_end_date": "2025-01-01",
+      "backtest_file": "data/outputs/validation/scoring_backtest_results.csv",
+      "method": "valuation_signal precision/recall/IR sweep, 36-month horizon, 2,220 region-month observations",
+      "old_values": {
+        "supportive": 60,
+        "mixed": 40
+      },
+      "new_values": {
+        "supportive": 55,
+        "mixed": 45
+      },
+      "supportive_threshold_evidence": {
+        "threshold": 55,
+        "ir_36m": 0.6786,
+        "precision_36m": 0.6919,
+        "recall_36m": 0.3914,
+        "n_supportive": 701,
+        "horizon_months": 36,
+        "rationale": "Best balance of IR and recall among thresholds with meaningful sample size. Threshold 60 had higher precision (0.728) but recall collapsed to 0.169 (n=287)."
+      },
+      "cautious_threshold_evidence": {
+        "threshold": 45,
+        "ir_cautious_36m": -1.0602,
+        "precision_cautious_36m": 0.8525,
+        "recall_cautious_36m": 0.3476,
+        "n_cautious": 400,
+        "horizon_months": 36,
+        "rationale": "Strongest well-populated cautious signal. Threshold 40 had perfect precision but only n=119. Threshold 50 diluted precision to 0.602."
+      },
+      "excluded_thresholds": {
+        "threshold_30": "Degenerate: n_cautious=14, recall_cautious=0.014. Excluded from consideration despite best raw IR (-1.124).",
+        "threshold_35": "n_cautious=49. Too small for reliable inference.",
+        "threshold_65": "n_supportive=28. Degenerate upside split."
+      }
+    },
     "thresholds": {
-      "buy": 65,
-      "hold": 40,
-      "dont_buy": 0
+      "supportive": 55,
+      "mixed": 45,
+      "cautious": 0
     },
     "consumer_weights": {
-      "affordability": 0.40,
+      "affordability": 0.4,
       "price_momentum": 0.25,
-      "cycle_position": 0.20,
+      "cycle_position": 0.2,
       "rate_environment": 0.15
     },
     "reit_weights": {
       "yield_score": 0.35,
-      "cycle_position": 0.30,
-      "price_momentum": 0.20,
+      "cycle_position": 0.3,
+      "price_momentum": 0.2,
       "risk_adjusted_return": 0.15
+    },
+    "app_consumer_weights": {
+      "base_model": 0.7,
+      "affordability": 0.3,
+      "downside_risk": 0.0,
+      "_note": "Expert-prior. Adjusted 2026-03-31: C2 (downside_probability) retired \u2014 column absent from panel, backtest returned NaN accuracy. Weight zeroed (0.10\u21920.0), redistributed to base_model (0.60\u21920.70). C3 accuracy=45.03% (<50%, -0.10 on affordability), redistributed to base_model in prior round. Last reviewed 2026-03-31."
+    },
+    "c2_backtest_accuracy": "NaN",
+    "c3_backtest_accuracy": 0.4503,
+    "c4_backtest_accuracy": 0.4417,
+    "c5_backtest_accuracy": 0.6305,
+    "app_reit_weights": {
+      "base_model": 0.8,
+      "yield_signal": 0.2,
+      "downside_risk": 0.0,
+      "_note": "Adjusted 2026-03-31: C2 (downside_probability) retired \u2014 column absent from panel, backtest returned NaN accuracy. Weight zeroed (0.25\u21920.0), redistributed to base_model (0.55\u21920.80). C4 (yield) accuracy=44.17% (<50%, -0.10 on yield_signal 0.30\u21920.20, redistributed to base_model in prior round). C5 (cycle) accuracy=63.05% (>=55%, weight unchanged). Last reviewed 2026-03-31."
+    },
+    "c2_retirement_note": "C2 (downside_probability) retired 2026-03-31. Column absent from canonical panel \u2014 backtest returned NaN accuracy. Signal retained in engine.py as optional parameter but zeroed from composite weights. Reactivate if downside_probability is computed in a future panel rebuild.",
+    "scenario_consumer_weights": {
+      "Baseline": 0.4,
+      "Rate_Shock": 0.25,
+      "Stagflation": 0.2,
+      "Soft_Landing": 0.1,
+      "Recovery_Boom": 0.05,
+      "_note": "Scenario probability priors for consumer weighted-return. Downside-skewed: adverse scenarios (Rate_Shock + Stagflation) weighted 0.45 combined. Expert-prior; not calibrated to historical frequencies. Last reviewed 2026-03."
+    },
+    "scenario_reit_weights": {
+      "Baseline": 0.2,
+      "Soft_Landing": 0.2,
+      "Rate_Shock": 0.2,
+      "Stagflation": 0.2,
+      "Recovery_Boom": 0.2,
+      "_note": "Scenario probability priors for REIT weighted-return. Equal weight (1/N = 0.20) across 5 scenarios. Previously computed dynamically at runtime \u2014 now explicit. Last reviewed 2026-03."
     }
   },
-
   "ui": {
     "deployment": "streamlit_cloud",
     "default_region": "London",
-    "scenario_labels": ["Bear", "Base", "Bull"],
-    "scenario_percentiles": [10, 50, 90]
+    "default_income_gbp": 65000,
+    "default_deposit_gbp": 75000,
+    "default_mortgage_term_years": 30,
+    "default_target_yield_pct": 5.5,
+    "default_holding_horizon_years": 5,
+    "default_property_price_gbp": 325000,
+    "historical_mode_label": "Historical research panel",
+    "scenario_labels": [
+      "Baseline",
+      "Soft_Landing",
+      "Rate_Shock",
+      "Stagflation",
+      "Recovery_Boom"
+    ],
+    "scenario_percentiles": [
+      10,
+      50,
+      90
+    ],
+    "fan_chart_percentiles": [
+      10,
+      25,
+      50,
+      75,
+      90
+    ],
+    "risk_tolerance_options": [
+      "Conservative",
+      "Balanced",
+      "Opportunistic"
+    ]
+  },
+  "controls": {
+    "override_warning_rate_bps": 150,
+    "override_warning_sigma_multiplier": 1.5,
+    "override_warning_horizon_years": 10,
+    "max_paths_interactive": 2500,
+    "default_paths_interactive": 750,
+    "random_seed": 42,
+    "minimum_price_floor_ratio": 0.35,
+    "affordability_multiple": 4.5
+  },
+  "scenarios": {
+    "Baseline": {
+      "name": "Baseline",
+      "display_name": "Baseline",
+      "rate_shift_bps": 0,
+      "income_growth_shift_pct": 0.0,
+      "supply_shift_pct": 0.0,
+      "volatility_multiplier": 1.0,
+      "drift_shift_pct": 0.0,
+      "valuation_gap_closure": 0.25,
+      "financial_stress_shift": 0.0,
+      "transaction_shift": 0.0,
+      "min_target_price_ratio": 0.9,
+      "regime_prob_normal": 0.45,
+      "regime_prob_stress": 0.35,
+      "regime_prob_boom": 0.2,
+      "note": "Historical baseline aligned to the canonical structural fair-value and baseline simulation assumptions."
+    },
+    "Soft_Landing": {
+      "name": "Soft_Landing",
+      "display_name": "Soft Landing",
+      "rate_shift_bps": -125,
+      "income_growth_shift_pct": 1.0,
+      "supply_shift_pct": -1.0,
+      "volatility_multiplier": 0.9,
+      "drift_shift_pct": 0.5,
+      "valuation_gap_closure": 0.18,
+      "financial_stress_shift": -0.35,
+      "transaction_shift": 0.02,
+      "min_target_price_ratio": 0.92,
+      "regime_prob_normal": 0.55,
+      "regime_prob_stress": 0.2,
+      "regime_prob_boom": 0.25,
+      "note": "Rates ease and financial stress normalises faster than in the baseline."
+    },
+    "Rate_Shock": {
+      "name": "Rate_Shock",
+      "display_name": "Rate Shock",
+      "rate_shift_bps": 200,
+      "income_growth_shift_pct": -1.25,
+      "supply_shift_pct": 1.5,
+      "volatility_multiplier": 1.25,
+      "drift_shift_pct": -1.0,
+      "valuation_gap_closure": 0.35,
+      "financial_stress_shift": 0.9,
+      "transaction_shift": -0.05,
+      "min_target_price_ratio": 0.85,
+      "regime_prob_normal": 0.2,
+      "regime_prob_stress": 0.65,
+      "regime_prob_boom": 0.15,
+      "note": "Mortgage repricing and tighter financial conditions push the path below the historical baseline."
+    },
+    "Stagflation": {
+      "name": "Stagflation",
+      "display_name": "Stagflation",
+      "rate_shift_bps": 100,
+      "income_growth_shift_pct": -1.0,
+      "supply_shift_pct": 2.0,
+      "volatility_multiplier": 1.15,
+      "drift_shift_pct": -0.75,
+      "valuation_gap_closure": 0.32,
+      "financial_stress_shift": 0.7,
+      "transaction_shift": -0.03,
+      "min_target_price_ratio": 0.86,
+      "regime_prob_normal": 0.18,
+      "regime_prob_stress": 0.67,
+      "regime_prob_boom": 0.15,
+      "note": "Sticky inflation keeps real income weak and financial conditions tight."
+    },
+    "Recovery_Boom": {
+      "name": "Recovery_Boom",
+      "display_name": "Recovery Boom",
+      "rate_shift_bps": -175,
+      "income_growth_shift_pct": 1.5,
+      "supply_shift_pct": -2.0,
+      "volatility_multiplier": 0.85,
+      "drift_shift_pct": 0.9,
+      "valuation_gap_closure": 0.12,
+      "financial_stress_shift": -0.55,
+      "transaction_shift": 0.04,
+      "min_target_price_ratio": 0.95,
+      "regime_prob_normal": 0.25,
+      "regime_prob_stress": 0.15,
+      "regime_prob_boom": 0.6,
+      "note": "Lower rates, stronger income, and firmer demand support a better-than-baseline path."
+    }
+  },
+  "ui_reference_values": {
+    "downside_prob_gfc_avg": 0.71,
+    "downside_prob_2022_correction_avg": 0.48,
+    "_note": "Cross-regional averages from model backtests. For UI context only."
+  },
+  "scenario_descriptions": {
+    "Baseline": "Gradual rate normalisation with steady real income growth; broadly consistent with OBR central forecasts.",
+    "Rate_Shock": "Bank Rate rises sharply to 6%+ and stays elevated; affordability severely compressed for 18\u201324 months.",
+    "Stagflation": "Persistent inflation with stagnant real incomes; real house prices erode even if nominal prices hold.",
+    "Soft_Landing": "Rates fall smoothly to 3.5%; affordability recovers without triggering a supply response.",
+    "Recovery_Boom": "Rapid rate cuts combined with strong wage growth; demand surge outpaces supply in constrained markets."
+  },
+  "household_explorer_defaults": {
+    "London": {
+      "property_price": 530000,
+      "household_income": 72000
+    },
+    "South East": {
+      "property_price": 395000,
+      "household_income": 62000
+    },
+    "East of England": {
+      "property_price": 340000,
+      "household_income": 58000
+    },
+    "South West": {
+      "property_price": 310000,
+      "household_income": 52000
+    },
+    "East Midlands": {
+      "property_price": 245000,
+      "household_income": 48000
+    },
+    "West Midlands": {
+      "property_price": 255000,
+      "household_income": 49000
+    },
+    "Yorkshire and The Humber": {
+      "property_price": 215000,
+      "household_income": 46000
+    },
+    "North West": {
+      "property_price": 225000,
+      "household_income": 47000
+    },
+    "North East": {
+      "property_price": 165000,
+      "household_income": 43000
+    },
+    "Wales": {
+      "property_price": 210000,
+      "household_income": 44000
+    },
+    "Scotland": {
+      "property_price": 200000,
+      "household_income": 47000
+    },
+    "Northern Ireland": {
+      "property_price": 185000,
+      "household_income": 42000
+    }
+  },
+  "fair_value_pti_weight_estimated": 0.25,
+  "fair_value_pti_weight_method": "grid_search_pooled_sse",
+  "_fair_value_weight_note": "Estimated 2026-04-02 via grid-search SSE on pooled panel. Clips to [0.25, 0.75].",
+  "sigma_floor_overrides": {
+    "South West": 0.045,
+    "_note": "Raised from 0.030 to 0.045 on 2026-04-02. South West historical IQR ratio was 0.267 with standard prior. Floor ensures ratio >= 0.30. Governance: same mechanism as Wales (R020) and Yorkshire (R021) resolutions."
   }
 }

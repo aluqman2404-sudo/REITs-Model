@@ -1,0 +1,19 @@
+version: "3.8"
+services:
+  app:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      - LOG_DESTINATION=file
+      - ENV=production
+    volumes:
+      - ./data:/app/data:ro
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped

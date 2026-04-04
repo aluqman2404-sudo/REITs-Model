@@ -1,44 +1,34 @@
-# Core data
-python-dateutil>=2.8.0
-pandas>=2.1.0
-numpy>=1.26.0
-scipy>=1.11.0
+# Core analytics
+numpy>=1.26,<2.2
+pandas>=2.1,<2.3
+scipy>=1.11,<1.15
+python-dateutil>=2.8,<3
 
-# Econometric modelling
-statsmodels>=0.14.0
+# Econometrics
+statsmodels>=0.14,<0.15
+linearmodels>=5.4,<7
 
-# Visualisation
-matplotlib>=3.8.0
-seaborn>=0.13.0
-plotly>=5.18.0
+# Visualisation and UI
+matplotlib>=3.8,<3.11
+seaborn>=0.13,<0.14
+streamlit>=1.50,<1.60
 
-# UI — Streamlit (free deployment on Streamlit Community Cloud)
-streamlit>=1.30.0
-streamlit-folium>=0.18.0
+# Data acquisition and parsing
+requests>=2.31,<3
+httpx>=0.26,<0.29
+beautifulsoup4>=4.12,<5
+lxml>=4.9,<6
+odfpy>=1.4,<2
+python-dotenv>=1.0,<2
 
-# ODS file reading (MHCLG live tables)
-odfpy>=1.4.1
+# Optional mapping utilities retained from earlier stages
+folium>=0.15,<0.17
+geopandas>=0.14,<1
 
-# Geospatial / regional maps
-folium>=0.15.0
-geopandas>=0.14.0
-
-# Data acquisition
-requests>=2.31.0
-httpx>=0.26.0
-beautifulsoup4>=4.12.0
-lxml>=4.9.0
-
-# ONS / API helpers
-python-dotenv>=1.0.0
-
-# Config & serialisation
-pydantic>=2.5.0
+# Optional monitoring destinations (install as needed)
+watchtower>=3.0.0  # optional CloudWatch logging; requires boto3
+# datadog-lambda>=4.0.0  # optional Datadog logging (uncomment if needed)
 
 # Testing
-pytest>=7.4.0
-pytest-cov>=4.1.0
-
-# Notebooks
-jupyterlab>=4.0.0
-ipykernel>=6.27.0
+pytest>=8.0,<9
+pytest-cov>=4.1,<6

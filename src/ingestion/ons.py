@@ -64,6 +64,14 @@ def fetch_ons_cpi(save: bool = True) -> pd.DataFrame:
         path = DATA_RAW / f"ons_cpi_{datetime.today():%Y%m}.csv"
         df.to_csv(path, index=False)
         print(f"  Saved {len(df):,} rows → {path.name}")
+        from src.ingestion.release_metadata import write_release_metadata
+        write_release_metadata(
+            series="ons_cpi",
+            raw_file_path=path,
+            source_url=_ONS_GENERATOR.format(uri=_SERIES["cpi"]),
+            publication_lag_months_estimated=1,
+            df=df,
+        )
 
     return df
 
@@ -94,6 +102,14 @@ def fetch_ons_earnings(save: bool = True) -> pd.DataFrame:
         df.to_csv(path, index=False)
         print(f"  Saved {len(df):,} rows → {path.name}")
         print("  Note: national series only. Regional ASHE data → fetch_ons_earnings_regional()")
+        from src.ingestion.release_metadata import write_release_metadata
+        write_release_metadata(
+            series="ons_earnings",
+            raw_file_path=path,
+            source_url=_ONS_GENERATOR.format(uri=_SERIES["earnings_median"]),
+            publication_lag_months_estimated=2,
+            df=df,
+        )
 
     return df
 
@@ -124,6 +140,14 @@ def fetch_ons_earnings_regional(save: bool = True) -> pd.DataFrame:
                 path = DATA_RAW / f"ons_earnings_regional_{datetime.today():%Y%m}.csv"
                 df.to_csv(path, index=False)
                 print(f"  Saved {len(df):,} rows → {path.name}")
+                from src.ingestion.release_metadata import write_release_metadata
+                write_release_metadata(
+                    series="ons_earnings_regional",
+                    raw_file_path=path,
+                    source_url=url,
+                    publication_lag_months_estimated=6,
+                    df=df,
+                )
             return df
         except Exception as e:
             print(f"  ASHE URL failed: {e}")
@@ -170,6 +194,14 @@ def fetch_ons_population(save: bool = True) -> pd.DataFrame:
                 path = DATA_RAW / f"ons_population_{datetime.today():%Y%m}.csv"
                 df.to_csv(path, index=False)
                 print(f"  Saved {len(df):,} rows → {path.name}")
+                from src.ingestion.release_metadata import write_release_metadata
+                write_release_metadata(
+                    series="ons_population",
+                    raw_file_path=path,
+                    source_url=url,
+                    publication_lag_months_estimated=12,
+                    df=df,
+                )
             return df
         except Exception as e:
             print(f"  Population URL failed: {e}")

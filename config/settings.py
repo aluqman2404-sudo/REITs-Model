@@ -1,34 +1,38 @@
-"""
-Central settings — loads parameters.json and environment variables.
-All modules import from here instead of hardcoding paths or values.
-"""
+"""Backward-compatible settings wrapper around the typed config layer."""
+
+from __future__ import annotations
 
 import json
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
+
+from src.core.config import DEFAULT_CONFIG_PATH, load_config, reset_config_cache
+from src.core.paths import CONFIG_DIR, DATA_DIR, OUTPUT_DATA_DIR, PROCESSED_DATA_DIR, RAW_DATA_DIR, ROOT_DIR
+
 
 load_dotenv()
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+DATA_RAW = RAW_DATA_DIR
+DATA_PROCESSED = PROCESSED_DATA_DIR
+DATA_OUTPUTS = OUTPUT_DATA_DIR
+PARAMS_PATH = DEFAULT_CONFIG_PATH
 
-DATA_RAW       = ROOT_DIR / "data" / "raw"
-DATA_PROCESSED = ROOT_DIR / "data" / "processed"
-DATA_OUTPUTS   = ROOT_DIR / "data" / "outputs"
-CONFIG_DIR     = ROOT_DIR / "config"
-
-PARAMS_PATH = CONFIG_DIR / "parameters.json"
 
 def load_parameters() -> dict:
-    with open(PARAMS_PATH, "r") as f:
-        return json.load(f)
+    """Return the config as a plain dictionary for legacy modules."""
+    return load_config().model_dump()
+
 
 def save_parameters(params: dict) -> None:
-    with open(PARAMS_PATH, "w") as f:
-        json.dump(params, f, indent=2)
+    """Persist parameters.json and clear the typed config cache."""
+    with Path(PARAMS_PATH).open("w", encoding="utf-8") as handle:
+        json.dump(params, handle, indent=2)
+    reset_config_cache()
+
 
 PARAMS = load_parameters()
 
-# API keys — set these in a .env file, never hardcode
-ONS_API_KEY     = os.getenv("ONS_API_KEY", "")
-WOLFRAM_APP_ID  = os.getenv("WOLFRAM_APP_ID", "")
+ONS_API_KEY = os.getenv("ONS_API_KEY", "")
+WOLFRAM_APP_ID = os.getenv("WOLFRAM_APP_ID", "")

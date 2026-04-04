@@ -23,13 +23,6 @@ _HEADERS = {
     )
 }
 
-# Stable GOV.UK page listing all HPI downloads — scrape it for the current URL
-_GOV_UK_HPI_PAGE = (
-    "https://www.gov.uk/government/statistical-data-sets/"
-    "uk-house-price-index-data-downloads-august-2023"
-)
-
-# Fallback: try to find the page via the collection index
 _GOV_UK_HPI_COLLECTION = (
     "https://www.gov.uk/government/collections/uk-house-price-index-reports"
 )
@@ -37,31 +30,39 @@ _GOV_UK_HPI_COLLECTION = (
 
 def _find_latest_url() -> tuple[str, str]:
     """
-    Scrape the GOV.UK Land Registry HPI page to find the current full-file CSV URL.
+    Scrape the GOV.UK Land Registry HPI collection to find the latest current CSV URL.
     Returns (url, label).
     """
     from bs4 import BeautifulSoup
 
-    # Try the direct data page first, then collection index
-    for page_url in [_GOV_UK_HPI_PAGE, _GOV_UK_HPI_COLLECTION]:
-        try:
-            r = requests.get(page_url, headers=_HEADERS, timeout=15)
-            r.raise_for_status()
-            soup = BeautifulSoup(r.text, "lxml")
+    collection = requests.get(_GOV_UK_HPI_COLLECTION, headers=_HEADERS, timeout=15)
+    collection.raise_for_status()
+    collection_soup = BeautifulSoup(collection.text, "lxml")
 
-            # Find all links pointing to the S3 HPI full file
-            for a in soup.find_all("a", href=True):
-                href = a["href"]
-                m = re.search(r"UK-HPI-full-file-(\d{4}-\d{2})\.csv", href, re.IGNORECASE)
-                if m:
-                    label = m.group(1)
-                    # Ensure it's a full URL
-                    if not href.startswith("http"):
-                        href = "https://prod.publicdata.landregistry.gov.uk" \
-                               ".s3-website-eu-west-1.amazonaws.com/" + href.lstrip("/")
-                    return href, label
-        except Exception:
-            continue
+    latest_page_url = None
+    latest_label = None
+    for a in collection_soup.find_all("a", href=True):
+        href = a["href"]
+        match = re.search(r"/government/statistical-data-sets/uk-house-price-index-data-downloads-([a-z]+-\d{4})", href)
+        if match:
+            latest_page_url = href if href.startswith("http") else f"https://www.gov.uk{href}"
+            latest_label = match.group(1)
+            break
+
+    if latest_page_url is None:
+        raise RuntimeError("Could not locate the latest UK HPI data-download page from the GOV.UK collection index.")
+
+    page = requests.get(latest_page_url, headers=_HEADERS, timeout=15)
+    page.raise_for_status()
+    page_soup = BeautifulSoup(page.text, "lxml")
+    for a in page_soup.find_all("a", href=True):
+        href = a["href"]
+        match = re.search(r"Average-prices-(\d{4}-\d{2})\.csv", href, re.IGNORECASE)
+        if match:
+            label = match.group(1)
+            if not href.startswith("http"):
+                href = "https://publicdata.landregistry.gov.uk/" + href.lstrip("/")
+            return href, label
 
     # Final fallback — the S3 path is deterministic; try the most likely recent months
     # (Land Registry publishes ~8 weeks after reference month)
@@ -71,9 +72,8 @@ def _find_latest_url() -> tuple[str, str]:
     for months_back in range(3, 9):
         candidate = today - relativedelta(months=months_back)
         url = (
-            "https://prod.publicdata.landregistry.gov.uk"
-            ".s3-website-eu-west-1.amazonaws.com"
-            f"/UK-HPI-full-file-{candidate.year}-{candidate.month:02d}.csv"
+            "https://publicdata.landregistry.gov.uk/market-trend-data/house-price-index-data/"
+            f"Average-prices-{candidate.year}-{candidate.month:02d}.csv"
         )
         try:
             r = requests.get(url, headers=_HEADERS, stream=True, timeout=10)
@@ -87,7 +87,7 @@ def _find_latest_url() -> tuple[str, str]:
         "Could not locate Land Registry HPI full file automatically.\n"
         "Download manually from:\n"
         "  https://www.gov.uk/government/collections/uk-house-price-index-reports\n"
-        "Save the 'UK HPI full file' CSV to:\n"
+        "Save the 'Average prices' CSV to:\n"
         f"  {DATA_RAW / 'land_registry_hpi_YYYYMM.csv'}"
     )
 
@@ -137,5 +137,13 @@ def fetch_land_registry(url: str | None = None, save: bool = True) -> pd.DataFra
         out = DATA_RAW / f"land_registry_hpi_{datetime.today():%Y%m}.csv"
         df.to_csv(out, index=False)
         print(f"  Saved {len(df):,} rows → {out.name}")
+        from src.ingestion.release_metadata import write_release_metadata
+        write_release_metadata(
+            series="land_registry_hpi",
+            raw_file_path=out,
+            source_url=url,
+            publication_lag_months_estimated=2,
+            df=df,
+        )
 
     return df

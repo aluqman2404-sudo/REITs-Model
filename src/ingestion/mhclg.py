@@ -96,6 +96,14 @@ def fetch_mhclg_supply(save: bool = True) -> pd.DataFrame:
         df.to_csv(path, index=False)
         print(f"  Saved {len(df):,} rows → {path.name}")
         print("  Note: England regions only (Wales/Scotland/NI published separately)")
+        from src.ingestion.release_metadata import write_release_metadata
+        write_release_metadata(
+            series="mhclg_supply",
+            raw_file_path=path,
+            source_url=_TABLE_118_URL,
+            publication_lag_months_estimated=8,
+            df=df,
+        )
 
     return df
 
