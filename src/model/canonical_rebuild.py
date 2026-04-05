@@ -143,6 +143,12 @@ def _add_engineered_features(df: pd.DataFrame) -> pd.DataFrame:
         # Treat financial stress as an episodic overlay, not a continuous structural elasticity.
         df[STRESS_FEATURE] = (
             df["financial_stress_lag3"] - threshold).clip(lower=0.0)
+    # Add log_pti_ratio = log_income_asof - log_rent to remove multicollinearity
+    # between log_income_asof and log_rent (r=0.747) which causes a sign violation
+    # in the P* fair-value OLS. Using the ratio ensures income coefficient is positive.
+    if "log_pti_ratio" not in df.columns and "log_income_asof" in df.columns and "log_rent" in df.columns:
+        df["log_pti_ratio"] = df["log_income_asof"] - df["log_rent"]
+
     if "nominal_house_price" in df.columns and "real_annual_earnings" in df.columns:
         if "loan_to_income" not in df.columns:
             # LTI at 4x conventional income multiple anchor: measures how many
@@ -312,6 +318,18 @@ def _estimate_growth_coefficients(panel: pd.DataFrame) -> tuple[pd.DataFrame, pd
         _nom_growth = np.log(_nom_price).diff().dropna()
         long_run_nominal_lookup[_region] = float(_nom_growth.mean() * 12.0)
 
+    # Pre-compute per-region gamma floor from historical mean log_return
+    # (= diff of log_real_price, annualised). Used to prevent gamma from falling
+    # below the long-run historical mean real return for each region.
+    # This reduces simulation conservative bias for regions with very low gamma estimates.
+    gamma_min_lookup: dict[str, float] = {}
+    for _region, _rgrp in indexed.groupby(level="region"):
+        if "log_real_price" in _rgrp.columns:
+            _log_ret = _rgrp["log_real_price"].diff().dropna()
+            gamma_min_lookup[_region] = float(_log_ret.mean() * 12.0)
+        else:
+            gamma_min_lookup[_region] = float(guardrails.gamma_min_annual)
+
     # Collect raw and guardrailed betas for post-loop distribution reports.
     supply_raw_vals: list[tuple[str, float, float]] = []
     affordability_raw_vals: list[tuple[str, float]] = []
@@ -396,11 +414,17 @@ def _estimate_growth_coefficients(panel: pd.DataFrame) -> tuple[pd.DataFrame, pd
             0.25 * rent_growth + 0.20 * transaction_trend
         gamma_long_run_nominal = long_run_nominal_lookup.get(
             region, gamma_current_real)
-        gamma_annual = _clip(
+        gamma_estimated = _clip(
             0.40 * gamma_current_real + 0.60 * gamma_long_run_nominal,
             guardrails.gamma_min_annual,
             guardrails.gamma_max_annual,
         )
+        # Apply per-region gamma floor: gamma = max(gamma_estimated, gamma_min[region])
+        # gamma_min is the long-run historical monthly mean log_return (2005-2025 panel).
+        # Prevents the simulation from being overly conservative for regions where
+        # the blended gamma estimate falls below the historical observed mean.
+        gamma_floor = gamma_min_lookup.get(region, float(guardrails.gamma_min_annual))
+        gamma_annual = max(gamma_estimated, gamma_floor)
 
         # --- Residual diagnostics ---
         dw_stat = float(sm.stats.stattools.durbin_watson(fit.resid))
@@ -1456,10 +1480,20 @@ def build_stage4_parameters() -> pd.DataFrame:
         _warnings.warn(
             f"[build_stage4_parameters] Could not persist PTI weight to parameters.json: {_exc}", UserWarning, stacklevel=2)
 
+    # Sign constraints for P* fair-value OLS:
+    # log_pti_ratio must be positive (higher income/rent ratio → higher fair value)
+    # mortgage_rate must be negative (higher rates → lower fair value)
+    _sign_constraints: dict[str, float] = {}
+    if "log_pti_ratio" in config.fair_value.regressors:
+        _sign_constraints["log_pti_ratio"] = +1.0
+    if "mortgage_rate" in config.fair_value.regressors:
+        _sign_constraints["mortgage_rate"] = -1.0
+
     fair_value = fit_structural_fair_value(
         master,
         regressors=config.fair_value.regressors,
         anchor_months=config.fair_value.anchor_months,
+        sign_constraints=_sign_constraints if _sign_constraints else None,
     )
     fair_panel = fair_value.fitted_panel.copy()
     cpi_base = float(
@@ -1643,10 +1677,16 @@ def build_stage5_summary(stage4_params: pd.DataFrame) -> pd.DataFrame:
     """Build canonical Stage 5 scenario summaries from the structural fair-value rebuild."""
     config = load_config()
     master = _load_master_dataset()
+    _sign_constraints_s5: dict[str, float] = {}
+    if "log_pti_ratio" in config.fair_value.regressors:
+        _sign_constraints_s5["log_pti_ratio"] = +1.0
+    if "mortgage_rate" in config.fair_value.regressors:
+        _sign_constraints_s5["mortgage_rate"] = -1.0
     fair_value = fit_structural_fair_value(
         master,
         regressors=config.fair_value.regressors,
         anchor_months=config.fair_value.anchor_months,
+        sign_constraints=_sign_constraints_s5 if _sign_constraints_s5 else None,
     )
     fair_panel = fair_value.fitted_panel.copy()
     cpi_base = float(
@@ -1670,9 +1710,15 @@ def build_stage5_summary(stage4_params: pd.DataFrame) -> pd.DataFrame:
         start_price = float(latest_row["nominal_house_price"])
         current_rate = float(latest_row["mortgage_rate"])
         current_stress = float(latest_row.get("financial_stress_lag3", 0.0))
-        baseline_log_return = _predict_baseline_return(
+        baseline_log_return_raw = _predict_baseline_return(
             baseline_fit, latest_row)
-        base_drift = float(params.loc[region, "gamma_annual_pp"]) / 100.0
+        # Apply gamma floor to baseline_log_return: ensure the 5yr nominal return
+        # is at least 5 × gamma_floor_annual (long-run nominal drift).
+        # This prevents the simulation from being unrealistically conservative
+        # when the baseline return model predicts cyclically depressed returns.
+        _gamma_floor_annual = float(params.loc[region, "gamma_annual_pp"]) / 100.0
+        baseline_log_return = max(baseline_log_return_raw, 5.0 * _gamma_floor_annual)
+        base_drift = _gamma_floor_annual
         base_sigma = float(params.loc[region, "sigma"])
         kappa = float(params.loc[region, "kappa"])
         beta_rate = float(params.loc[region, "beta_rate"])

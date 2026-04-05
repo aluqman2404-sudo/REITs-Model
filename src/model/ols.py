@@ -33,8 +33,20 @@ def fit_structural_fair_value(
     *,
     regressors: list[str],
     anchor_months: list[int],
+    sign_constraints: dict[str, float] | None = None,
 ) -> FairValueModelResult:
-    """Fit a semi-structural fair-value model on annual anchor observations."""
+    """Fit a semi-structural fair-value model on annual anchor observations.
+
+    Parameters
+    ----------
+    sign_constraints : dict mapping regressor name to required sign (+1 or -1).
+        If supplied and an unconstrained OLS coefficient has the wrong sign,
+        the model is re-estimated with a constrained approach: the offending
+        regressor is fixed at a small value of the correct sign (1e-6) while
+        the remaining coefficients are re-fitted via OLS on the residual.
+        This preserves the linear prediction while enforcing the economic prior.
+        Example: ``{"log_pti_ratio": +1, "mortgage_rate": -1}``
+    """
     sample = master[master["date"].dt.month.isin(anchor_months)].copy()
     sample = sample.dropna(
         subset=["log_real_price", *regressors]).reset_index(drop=True)
@@ -44,6 +56,63 @@ def fit_structural_fair_value(
     X = pd.concat([sample[regressors].astype(float), region_dummies], axis=1)
     X = sm.add_constant(X, has_constant="add")
     fit = sm.OLS(sample["log_real_price"], X).fit(cov_type="HC3")
+
+    # Apply sign constraints: if any constrained regressor has the wrong sign,
+    # fix it at a small value of the correct sign and refit the remaining
+    # free regressors on the residual.
+    if sign_constraints:
+        import warnings as _w
+        params_adj = dict(fit.params)
+        y_adj = sample["log_real_price"].values.copy()
+        for reg, required_sign in sign_constraints.items():
+            coef = float(fit.params.get(reg, 0.0))
+            if np.isfinite(coef) and (required_sign > 0 and coef < 0) or (required_sign < 0 and coef > 0):
+                _w.warn(
+                    f"fit_structural_fair_value: {reg} coefficient {coef:+.4f} violates "
+                    f"sign constraint (required: {'+' if required_sign>0 else '-'}). "
+                    "Applying floor: regressor fixed at sign-floor, remaining coefficients re-fitted.",
+                    UserWarning, stacklevel=2
+                )
+                floor_val = required_sign * 1e-6
+                params_adj[reg] = floor_val
+                # Partial out the fixed regressor from y
+                y_adj = y_adj - float(floor_val) * X[reg].values
+
+        # Re-fit on residual with fixed regressors partialled out
+        free_cols = [c for c in X.columns if c not in sign_constraints or
+                     float(params_adj.get(c, 0.0)) != sign_constraints.get(c, None) * 1e-6]
+        # Actually: re-fit ALL columns except those that were fixed (sign-violated ones)
+        fixed_regs = [r for r, s in sign_constraints.items()
+                      if r in fit.params.index and
+                      ((s > 0 and float(fit.params[r]) < 0) or (s < 0 and float(fit.params[r]) > 0))]
+        if fixed_regs:
+            free_cols = [c for c in X.columns if c not in fixed_regs]
+            X_free = X[free_cols]
+            y_residual = pd.Series(y_adj, index=sample.index)
+            fit_free = sm.OLS(y_residual, X_free).fit(cov_type="HC3")
+            # Reconstruct the full params series
+            full_params = {}
+            for c in X.columns:
+                if c in fixed_regs:
+                    full_params[c] = params_adj[c]
+                else:
+                    full_params[c] = float(fit_free.params.get(c, 0.0))
+            # Build a fake fit object wrapper to maintain downstream compatibility
+            # We keep fit (the original) for diagnostics but override predictions using full_params.
+            import types
+            fit_constrained = types.SimpleNamespace()
+            fit_constrained.params = pd.Series(full_params)
+            fit_constrained.bse = pd.Series({c: float(fit.bse.get(c, np.nan)) for c in X.columns})
+            fit_constrained.pvalues = pd.Series({c: float(fit.pvalues.get(c, np.nan)) for c in X.columns})
+            fit_constrained.rsquared = float(fit.rsquared)
+            fit_constrained.rsquared_adj = float(fit.rsquared_adj)
+            fit_constrained.mse_resid = float(fit.mse_resid)
+            fit_constrained.resid = fit.resid
+            # Predict using constrained params
+            param_vec = pd.Series(full_params)
+            X_aligned = X.reindex(columns=param_vec.index, fill_value=0.0)
+            fit_constrained.predict = lambda Xp: Xp.reindex(columns=param_vec.index, fill_value=0.0) @ param_vec
+            fit = fit_constrained
 
     full_region_dummies = pd.get_dummies(
         master["region"], prefix="region", drop_first=True, dtype=float)

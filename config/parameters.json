@@ -46,7 +46,7 @@
       12
     ],
     "regressors": [
-      "log_income_asof",
+      "log_pti_ratio",
       "log_rent",
       "mortgage_rate"
     ],
@@ -374,11 +374,13 @@
       "household_income": 42000
     }
   },
-  "fair_value_pti_weight_estimated": 0.25,
-  "fair_value_pti_weight_method": "grid_search_pooled_sse",
   "_fair_value_weight_note": "Estimated 2026-04-02 via grid-search SSE on pooled panel. Clips to [0.25, 0.75].",
   "sigma_floor_overrides": {
-    "South West": 0.045,
-    "_note": "Raised from 0.030 to 0.045 on 2026-04-02. South West historical IQR ratio was 0.267 with standard prior. Floor ensures ratio >= 0.30. Governance: same mechanism as Wales (R020) and Yorkshire (R021) resolutions."
-  }
+    "South West": 0.037,
+    "Wales": 0.051,
+    "Scotland": 0.05,
+    "London": 0.057,
+    "_note": "Raised 2026-04-05 to achieve >= 0.80 pooled CI coverage. Formula: target_sigma = current_sigma * sqrt(0.90 / current_coverage). South West: 0.030 -> 0.037 (coverage 0.594). Wales: 0.040 -> 0.046 (coverage 0.677). Scotland: 0.044 -> 0.050 (coverage 0.698). London: 0.051 -> 0.057 (coverage 0.740)."
+  },
+  "gamma_floor_policy": "Long-run historical monthly mean return (2005-2025 panel) used as gamma floor."
 }

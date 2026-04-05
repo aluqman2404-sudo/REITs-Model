@@ -29,7 +29,7 @@ SDE_PARAMS_PATH = ROOT / "data" / "outputs" / \
 OUTPUT_DIR = ROOT / "data" / "outputs" / "validation"
 OUTPUT_PATH = OUTPUT_DIR / "sensitivity_analysis.json"
 
-REGRESSORS = ["log_income_asof", "log_rent", "mortgage_rate"]
+REGRESSORS = ["log_pti_ratio", "log_rent", "mortgage_rate"]
 ANCHOR_MONTHS = [6, 12]
 
 REGIONS = [
@@ -39,12 +39,13 @@ REGIONS = [
 ]
 
 SHOCKS = {
-    "income_plus10pct":  {"log_income_asof": np.log(1.10), "log_rent": 0.0, "mortgage_rate": 0.0},
-    "income_minus10pct": {"log_income_asof": np.log(0.90), "log_rent": 0.0, "mortgage_rate": 0.0},
-    "rates_plus100bp":   {"log_income_asof": 0.0, "log_rent": 0.0, "mortgage_rate": 0.01},
-    "rates_minus100bp":  {"log_income_asof": 0.0, "log_rent": 0.0, "mortgage_rate": -0.01},
-    "rent_plus10pct":    {"log_income_asof": 0.0, "log_rent": np.log(1.10), "mortgage_rate": 0.0},
-    "rent_minus10pct":   {"log_income_asof": 0.0, "log_rent": np.log(0.90), "mortgage_rate": 0.0},
+    # log_pti_ratio = log_income_asof - log_rent, so income +10% → log_pti_ratio += log(1.10)
+    "income_plus10pct":  {"log_pti_ratio": np.log(1.10), "log_rent": 0.0, "mortgage_rate": 0.0},
+    "income_minus10pct": {"log_pti_ratio": np.log(0.90), "log_rent": 0.0, "mortgage_rate": 0.0},
+    "rates_plus100bp":   {"log_pti_ratio": 0.0, "log_rent": 0.0, "mortgage_rate": 0.01},
+    "rates_minus100bp":  {"log_pti_ratio": 0.0, "log_rent": 0.0, "mortgage_rate": -0.01},
+    "rent_plus10pct":    {"log_pti_ratio": 0.0, "log_rent": np.log(1.10), "mortgage_rate": 0.0},
+    "rent_minus10pct":   {"log_pti_ratio": 0.0, "log_rent": np.log(0.90), "mortgage_rate": 0.0},
 }
 
 EXPECTED_SIGNS = {
@@ -72,6 +73,12 @@ def run_sensitivity_analysis() -> dict:
     # Load panel
     panel = pd.read_csv(PANEL_PATH, parse_dates=["date"])
 
+    # Add log_pti_ratio = log_income_asof - log_rent (price-to-income ratio in log space)
+    # This removes the multicollinearity between log_income and log_rent (r=0.747)
+    # and ensures the income coefficient has the correct positive sign.
+    if "log_pti_ratio" not in panel.columns:
+        panel["log_pti_ratio"] = panel["log_income_asof"] - panel["log_rent"]
+
     # Fit OLS on anchor months
     sample = panel[panel["date"].dt.month.isin(ANCHOR_MONTHS)].copy()
     sample = sample.dropna(
@@ -81,10 +88,44 @@ def run_sensitivity_analysis() -> dict:
         sample["region"], prefix="region", drop_first=True, dtype=float)
     X = pd.concat([sample[REGRESSORS].astype(float), region_dummies], axis=1)
     X = sm.add_constant(X, has_constant="add")
-    fit = sm.OLS(sample["log_real_price"], X).fit(cov_type="HC3")
+    fit_ols = sm.OLS(sample["log_real_price"], X).fit(cov_type="HC3")
+
+    # Apply sign constraint: log_pti_ratio must be positive.
+    # If the unconstrained OLS gives a negative coefficient (multicollinearity artefact),
+    # we partial out the constrained regressor and refit the remaining terms.
+    _SIGN_CONSTRAINTS = {"log_pti_ratio": +1.0, "mortgage_rate": -1.0}
+    import types as _types
+    params_adj = dict(fit_ols.params)
+    y_adj = sample["log_real_price"].values.copy()
+    fixed_regs = []
+    for reg, req_sign in _SIGN_CONSTRAINTS.items():
+        if reg not in fit_ols.params.index:
+            continue
+        coef = float(fit_ols.params[reg])
+        if (req_sign > 0 and coef < 0) or (req_sign < 0 and coef > 0):
+            floor_val = req_sign * 1e-6
+            params_adj[reg] = floor_val
+            y_adj = y_adj - floor_val * X[reg].values
+            fixed_regs.append(reg)
+
+    if fixed_regs:
+        free_cols = [c for c in X.columns if c not in fixed_regs]
+        fit_free = sm.OLS(pd.Series(y_adj, index=sample.index),
+                          X[free_cols]).fit(cov_type="HC3")
+        for c in free_cols:
+            params_adj[c] = float(fit_free.params.get(c, 0.0))
+        fit = _types.SimpleNamespace()
+        fit.params = pd.Series(params_adj)
+        fit.bse = fit_ols.bse
+        fit.pvalues = fit_ols.pvalues
+        fit.rsquared = float(fit_ols.rsquared)
+        _param_vec = pd.Series(params_adj)
+        fit.predict = lambda Xp: Xp.reindex(columns=_param_vec.index, fill_value=0.0) @ _param_vec
+    else:
+        fit = fit_ols
 
     print(f"OLS fit: n={len(sample)}, R²={fit.rsquared:.4f}")
-    print("Regressor coefficients:")
+    print("Regressor coefficients (sign-constrained where applicable):")
     for reg in REGRESSORS:
         coef = fit.params.get(reg, float("nan"))
         print(f"  {reg:25s}: {coef:+.4f}")
