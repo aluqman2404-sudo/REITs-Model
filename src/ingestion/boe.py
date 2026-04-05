@@ -93,12 +93,15 @@ def _fetch_iadb_csv() -> pd.DataFrame:
     try:
         df = pd.read_csv(io.StringIO(r.text))
         df.columns = [c.strip().lower() for c in df.columns]
-        date_col = next((c for c in df.columns if "date" in c or "day" in c), None)
-        rate_col = next((c for c in df.columns if "rate" in c or "value" in c or "iudbedr" in c.lower()), None)
+        date_col = next(
+            (c for c in df.columns if "date" in c or "day" in c), None)
+        rate_col = next(
+            (c for c in df.columns if "rate" in c or "value" in c or "iudbedr" in c.lower()), None)
         if not date_col or not rate_col:
             raise ValueError(f"Columns not found: {list(df.columns)}")
-        df = df[[date_col, rate_col]].rename(columns={date_col: "date", rate_col: "base_rate"})
-        df["date"]      = pd.to_datetime(df["date"], dayfirst=True, errors="coerce")
+        df = df[[date_col, rate_col]].rename(
+            columns={date_col: "date", rate_col: "base_rate"})
+        df["date"] = pd.to_datetime(df["date"], dayfirst=True, errors="coerce")
         df["base_rate"] = pd.to_numeric(df["base_rate"], errors="coerce")
         df = df.dropna().sort_values("date").reset_index(drop=True)
         if len(df) < 10:
@@ -123,12 +126,17 @@ def _fetch_html_table() -> pd.DataFrame:
         try:
             df = pd.read_html(str(tbl))[0]
             df.columns = [str(c).strip().lower() for c in df.columns]
-            date_col = next((c for c in df.columns if "date" in c or "effective" in c), None)
-            rate_col = next((c for c in df.columns if "rate" in c or "%" in c or "bank" in c), None)
+            date_col = next(
+                (c for c in df.columns if "date" in c or "effective" in c), None)
+            rate_col = next(
+                (c for c in df.columns if "rate" in c or "%" in c or "bank" in c), None)
             if date_col and rate_col and len(df) > 10:
-                df = df[[date_col, rate_col]].rename(columns={date_col: "date", rate_col: "base_rate"})
-                df["date"]      = pd.to_datetime(df["date"], dayfirst=True, errors="coerce")
-                df["base_rate"] = pd.to_numeric(df["base_rate"], errors="coerce")
+                df = df[[date_col, rate_col]].rename(
+                    columns={date_col: "date", rate_col: "base_rate"})
+                df["date"] = pd.to_datetime(
+                    df["date"], dayfirst=True, errors="coerce")
+                df["base_rate"] = pd.to_numeric(
+                    df["base_rate"], errors="coerce")
                 df = df.dropna().sort_values("date").reset_index(drop=True)
                 return df
         except Exception:

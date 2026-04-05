@@ -87,7 +87,8 @@ def _latest_raw_file(pattern: str) -> Path:
 def _coverage_record(path: Path, date_column: str = "date") -> SourceCoverage:
     df = pd.read_csv(path)
     dates = pd.to_datetime(df[date_column], errors="coerce")
-    modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat(timespec="seconds")
+    modified = datetime.fromtimestamp(
+        path.stat().st_mtime, tz=timezone.utc).isoformat(timespec="seconds")
     return SourceCoverage(
         source_file=path.name,
         file_modified_utc=modified,
@@ -97,9 +98,11 @@ def _coverage_record(path: Path, date_column: str = "date") -> SourceCoverage:
 
 
 def _min_coverage_end(coverage: dict[str, dict[str, str]], keys: list[str]) -> str:
-    ends = [coverage[key]["observation_end"] for key in keys if key in coverage]
+    ends = [coverage[key]["observation_end"]
+            for key in keys if key in coverage]
     if not ends:
-        raise ValueError("No coverage keys provided for weakest-end calculation")
+        raise ValueError(
+            "No coverage keys provided for weakest-end calculation")
     return min(ends)
 
 
@@ -117,13 +120,16 @@ def _annual_asof_series(
 ) -> pd.DataFrame:
     annual = annual_df.copy()
     annual[obs_date_column] = _month_start(annual[obs_date_column])
-    annual = annual.sort_values(["region", obs_date_column]).reset_index(drop=True)
+    annual = annual.sort_values(
+        ["region", obs_date_column]).reset_index(drop=True)
 
     frames: list[pd.DataFrame] = []
     for region, month_group in monthly_index.groupby("region", sort=False):
         month_group = month_group.sort_values("date").copy()
-        annual_region = annual[annual["region"] == region][[obs_date_column, value_column]].copy()
-        annual_region = annual_region.rename(columns={obs_date_column: "obs_date"})
+        annual_region = annual[annual["region"] ==
+                               region][[obs_date_column, value_column]].copy()
+        annual_region = annual_region.rename(
+            columns={obs_date_column: "obs_date"})
         merged = pd.merge_asof(
             month_group.sort_values("date"),
             annual_region.sort_values("obs_date"),
@@ -134,14 +140,15 @@ def _annual_asof_series(
         merged["region"] = region
         merged[output_value_column] = merged[value_column]
         merged[output_obs_date_column] = merged["obs_date"]
-        frames.append(merged[["region", "date", output_value_column, output_obs_date_column]])
+        frames.append(
+            merged[["region", "date", output_value_column, output_obs_date_column]])
     return pd.concat(frames, ignore_index=True)
 
 
 def _months_since_observation(date_series: pd.Series, obs_series: pd.Series) -> pd.Series:
     return (
-        (date_series.dt.year - obs_series.dt.year) * 12
-        + (date_series.dt.month - obs_series.dt.month)
+        (date_series.dt.year - obs_series.dt.year) * 12 +
+        (date_series.dt.month - obs_series.dt.month)
     )
 
 
@@ -151,15 +158,18 @@ def _build_descriptive_panel(
     output_path: Path = DESCRIPTIVE_PANEL_PATH,
     metadata_path: Path = DESCRIPTIVE_PANEL_METADATA_PATH,
 ) -> DescriptivePanelMetadata:
-    prices = pd.read_csv(_latest_raw_file("land_registry_hpi*.csv"), parse_dates=["date"])
+    prices = pd.read_csv(_latest_raw_file(
+        "land_registry_hpi*.csv"), parse_dates=["date"])
     prices = prices[prices["region"].isin(regions)][["date", "region", "average_price"]].rename(
         columns={"average_price": "descriptive_house_price"}
     )
-    rents = pd.read_csv(_latest_raw_file("ons_rental_levels*.csv"), parse_dates=["date"])
+    rents = pd.read_csv(_latest_raw_file(
+        "ons_rental_levels*.csv"), parse_dates=["date"])
     rents = rents[rents["region"].isin(regions)][["date", "region", "median_monthly_rent"]].rename(
         columns={"median_monthly_rent": "descriptive_monthly_rent"}
     )
-    yields = pd.read_csv(_latest_raw_file("rental_yield*.csv"), parse_dates=["date"])
+    yields = pd.read_csv(_latest_raw_file(
+        "rental_yield*.csv"), parse_dates=["date"])
     yields = yields[yields["region"].isin(regions)][["date", "region", "gross_yield_pct"]].rename(
         columns={"gross_yield_pct": "descriptive_gross_yield_pct"}
     )
@@ -171,12 +181,14 @@ def _build_descriptive_panel(
         .sort_values(["region", "date"])
         .reset_index(drop=True)
     )
-    panel["model_aligned_observation"] = panel["date"].le(pd.Timestamp(coverage["rental_yield"]["observation_end"]))
+    panel["model_aligned_observation"] = panel["date"].le(
+        pd.Timestamp(coverage["rental_yield"]["observation_end"]))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     panel.to_csv(output_path, index=False)
 
     metadata = DescriptivePanelMetadata(
-        generated_at_utc=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        generated_at_utc=datetime.now(
+            timezone.utc).isoformat(timespec="seconds"),
         descriptive_panel_file=output_path.name,
         row_count=int(len(panel)),
         region_count=int(panel["region"].nunique()),
@@ -200,7 +212,8 @@ def _build_descriptive_panel(
         ),
         source_coverage=coverage,
     )
-    metadata_path.write_text(json.dumps(asdict(metadata), indent=2), encoding="utf-8")
+    metadata_path.write_text(json.dumps(
+        asdict(metadata), indent=2), encoding="utf-8")
     logger.info("Wrote descriptive panel -> %s", output_path)
     logger.info("Wrote descriptive panel metadata -> %s", metadata_path)
     return metadata
@@ -212,13 +225,15 @@ def build_canonical_panel(
     metadata_path: Path = CANONICAL_PANEL_METADATA_PATH,
 ) -> CanonicalPanelMetadata:
     """Build the canonical panel with as-of annual features and source coverage metadata."""
-    panel = pd.read_csv(source_path, parse_dates=["date"]).sort_values(["region", "date"]).reset_index(drop=True)
+    panel = pd.read_csv(source_path, parse_dates=["date"]).sort_values(
+        ["region", "date"]).reset_index(drop=True)
     monthly_index = panel[["region", "date"]].copy()
 
     earnings_path = _latest_raw_file("ons_earnings_regional*.csv")
     earnings_raw = pd.read_csv(earnings_path)
     if "median_annual_earnings" not in earnings_raw.columns:
-        raise ValueError("Regional earnings raw file is missing median_annual_earnings")
+        raise ValueError(
+            "Regional earnings raw file is missing median_annual_earnings")
 
     earnings_asof = _annual_asof_series(
         monthly_index,
@@ -234,16 +249,22 @@ def build_canonical_panel(
         how="left",
     )
 
-    cpi_base = float(panel.loc[panel["date"] == pd.Timestamp("2015-01-01"), "cpi"].iloc[0])
-    panel["real_annual_earnings"] = panel["nominal_annual_earnings_asof"] / (panel["cpi"] / cpi_base)
+    cpi_base = float(
+        panel.loc[panel["date"] == pd.Timestamp("2015-01-01"), "cpi"].iloc[0])
+    panel["real_annual_earnings"] = panel["nominal_annual_earnings_asof"] / \
+        (panel["cpi"] / cpi_base)
     panel["earnings_obs_date"] = pd.to_datetime(panel["earnings_obs_date"])
-    panel["earnings_staleness_months"] = _months_since_observation(panel["date"], panel["earnings_obs_date"])
+    panel["earnings_staleness_months"] = _months_since_observation(
+        panel["date"], panel["earnings_obs_date"])
     panel["earnings_anchor_flag"] = panel["date"].dt.month.eq(12)
-    panel["earnings_interpolated_flag"] = panel["earnings_staleness_months"].gt(0)
+    panel["earnings_interpolated_flag"] = panel["earnings_staleness_months"].gt(
+        0)
 
     if "real_house_price" in panel.columns:
-        panel["price_to_income_ratio_derived"] = panel["real_house_price"] / panel["real_annual_earnings"]
-    panel["log_income_asof"] = np.where(panel["real_annual_earnings"] > 0, np.log(panel["real_annual_earnings"]), np.nan)
+        panel["price_to_income_ratio_derived"] = panel["real_house_price"] / \
+            panel["real_annual_earnings"]
+    panel["log_income_asof"] = np.where(panel["real_annual_earnings"] > 0, np.log(
+        panel["real_annual_earnings"]), np.nan)
     panel["log_income"] = panel["log_income_asof"]
     panel["log_price_to_income"] = panel["price_to_income_ratio_derived"].where(
         panel["price_to_income_ratio_derived"] > 0
@@ -284,7 +305,8 @@ def build_canonical_panel(
     # than min() because house prices (published ~8 weeks after reference month)
     # extend well beyond rental levels (ONS PRMS, ~12-month lag) and are the
     # primary market indicator in the descriptive view.
-    latest_descriptive_housing_end = max(latest_house_price_end, latest_rental_level_end)
+    latest_descriptive_housing_end = max(
+        latest_house_price_end, latest_rental_level_end)
     # rental_yield is excluded from weakest-input calculation because it is
     # used only in Stage 6 scoring (yield_score), not in the Stage 4 OLS
     # regression.  It is forward-filled in clean_and_merge for months beyond
@@ -294,7 +316,8 @@ def build_canonical_panel(
         coverage,
         ["house_prices", "mortgage_approvals", "transactions", "unemployment"],
     )
-    _build_descriptive_panel(sorted(panel["region"].unique().tolist()), coverage)
+    _build_descriptive_panel(
+        sorted(panel["region"].unique().tolist()), coverage)
 
     # ── Publication-lag audit ─────────────────────────────────────────────────
     # Map from coverage key to the sidecar series name written by each ingestion
@@ -323,11 +346,13 @@ def build_canonical_panel(
     # have had all panel series published simultaneously.
     # = panel_end_date − max_publication_lag_months
     _panel_end_ts = pd.Timestamp(str(panel["date"].max().date()))
-    _effective_ts = _panel_end_ts - pd.DateOffset(months=max_publication_lag_months)
+    _effective_ts = _panel_end_ts - \
+        pd.DateOffset(months=max_publication_lag_months)
     effective_data_as_of: str = str(_effective_ts.date())
 
     metadata = CanonicalPanelMetadata(
-        generated_at_utc=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        generated_at_utc=datetime.now(
+            timezone.utc).isoformat(timespec="seconds"),
         source_panel_file=source_path.name,
         canonical_panel_file=output_path.name,
         row_count=int(len(panel)),
@@ -351,7 +376,8 @@ def build_canonical_panel(
         effective_data_as_of=effective_data_as_of,
     )
     ensure_directory(METADATA_OUTPUT_DIR)
-    metadata_path.write_text(json.dumps(asdict(metadata), indent=2), encoding="utf-8")
+    metadata_path.write_text(json.dumps(
+        asdict(metadata), indent=2), encoding="utf-8")
     logger.info("Wrote canonical panel -> %s", output_path)
     logger.info("Wrote canonical panel metadata -> %s", metadata_path)
     return metadata

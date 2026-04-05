@@ -16,24 +16,24 @@ Run:
     python -m src.data.integrate_downloads
 """
 
+from linearmodels.panel import PanelOLS
+from statsmodels.tsa.stattools import adfuller
+from datetime import datetime
+from pathlib import Path
+import scipy.stats as sp_stats
+import statsmodels.api as sm
+import pandas as pd
+import numpy as np
 import warnings
 warnings.filterwarnings("ignore")
 
-import numpy as np
-import pandas as pd
-import statsmodels.api as sm
-import scipy.stats as sp_stats
-from pathlib import Path
-from datetime import datetime
-from statsmodels.tsa.stattools import adfuller
-from linearmodels.panel import PanelOLS
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-ROOT    = Path(__file__).resolve().parents[2]
-RAW     = ROOT / "data" / "raw"
-PROC    = ROOT / "data" / "processed"
-OUT     = ROOT / "data" / "outputs"
-VIMP    = OUT / "variable_improvement"
+ROOT = Path(__file__).resolve().parents[2]
+RAW = ROOT / "data" / "raw"
+PROC = ROOT / "data" / "processed"
+OUT = ROOT / "data" / "outputs"
+VIMP = OUT / "variable_improvement"
 FIN_DIR = OUT / "stage4_final"
 
 REGIONS = [
@@ -41,12 +41,12 @@ REGIONS = [
     "North West", "Northern Ireland", "Scotland", "South East",
     "South West", "Wales", "West Midlands", "Yorkshire and The Humber",
 ]
-MONTH_COLS  = [f"month_{m}" for m in range(2, 13)]
+MONTH_COLS = [f"month_{m}" for m in range(2, 13)]
 REGIME_COLS = ["regime_gfc", "regime_stamp_duty"]
-TRAIN_END   = pd.Timestamp("2015-12-01")
-TEST_START  = pd.Timestamp("2016-01-01")
+TRAIN_END = pd.Timestamp("2015-12-01")
+TEST_START = pd.Timestamp("2016-01-01")
 MODEL_START = pd.Timestamp("2005-01-01")
-MODEL_END   = pd.Timestamp("2025-10-01")
+MODEL_END = pd.Timestamp("2025-10-01")
 
 OLD_V2_RMSE = 0.01509   # Spec B from build_improved_variables.py
 
@@ -55,22 +55,31 @@ OLD_V2_RMSE = 0.01509   # Spec B from build_improved_variables.py
 
 def _h(t): print(f"\n{'='*60}\n{t}\n{'='*60}")
 
+
 def _adf_panel(df, col):
     pvals = []
     for _, grp in df.groupby(level="region"):
         s = grp[col].dropna()
         if len(s) >= 20:
-            try: pvals.append(adfuller(s.values, autolag="AIC")[1])
-            except: pass
-    if not pvals: return {"median_p": np.nan, "stationary": False}
+            try:
+                pvals.append(adfuller(s.values, autolag="AIC")[1])
+            except Exception:
+                pass
+    if not pvals:
+        return {"median_p": np.nan, "stationary": False}
     med = float(np.median(pvals))
     return {"median_p": med, "stationary": med < 0.10}
 
+
 def _stars(p):
-    if p < 0.01: return "***"
-    if p < 0.05: return "**"
-    if p < 0.10: return "*"
+    if p < 0.01:
+        return "***"
+    if p < 0.05:
+        return "**"
+    if p < 0.10:
+        return "*"
     return ""
+
 
 def _univariate_test(df, var, dep="price_growth"):
     clean = df.dropna(subset=[dep, var])
@@ -82,15 +91,16 @@ def _univariate_test(df, var, dep="price_growth"):
     try:
         res = PanelOLS(y, X, entity_effects=True).fit(
             cov_type="clustered", cluster_entity=True)
-        c  = res.params.get(var, np.nan)
+        c = res.params.get(var, np.nan)
         se = res.std_errors.get(var, np.nan)
-        t  = c / se if (not np.isnan(se) and se > 0) else np.nan
-        p  = float(res.pvalues.get(var, np.nan))
+        t = c / se if (not np.isnan(se) and se > 0) else np.nan
+        p = float(res.pvalues.get(var, np.nan))
         return {"coef": c, "t_stat": t, "p_val": p,
                 "r2_within": float(res.rsquared), "n_obs": len(clean)}
     except Exception as e:
         return {"coef": np.nan, "t_stat": np.nan, "p_val": np.nan,
                 "r2_within": np.nan, "n_obs": 0, "error": str(e)}
+
 
 def _driscoll_kraay_se(model_result, X, bandwidth=12):
     resids = model_result.resids
@@ -102,19 +112,25 @@ def _driscoll_kraay_se(model_result, X, bandwidth=12):
     T, k = len(dates_u), X_.shape[1]
     d_map = {d: i for i, d in enumerate(dates_u)}
     S = np.zeros((T, k))
-    for i in range(len(X_)): S[d_map[dates[i]]] += X_[i] * e_[i]
+    for i in range(len(X_)):
+        S[d_map[dates[i]]] += X_[i] * e_[i]
     Omega = np.zeros((k, k))
-    for t in range(T): Omega += np.outer(S[t], S[t])
+    for t in range(T):
+        Omega += np.outer(S[t], S[t])
     for lag in range(1, bandwidth + 1):
         w = 1 - lag / (bandwidth + 1)
         gl = np.zeros((k, k))
-        for t in range(lag, T): gl += np.outer(S[t], S[t - lag])
+        for t in range(lag, T):
+            gl += np.outer(S[t], S[t - lag])
         Omega += w * (gl + gl.T)
     Omega /= T
     XX = X_.T @ X_ / T
-    try: XX_inv = np.linalg.inv(XX)
-    except: XX_inv = np.linalg.pinv(XX)
+    try:
+        XX_inv = np.linalg.inv(XX)
+    except Exception:
+        XX_inv = np.linalg.pinv(XX)
     return np.sqrt(np.diag((XX_inv @ Omega @ XX_inv) / T))
+
 
 def _extrapolate_terminal_rent(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -151,18 +167,21 @@ def _extrapolate_terminal_rent(df: pd.DataFrame) -> pd.DataFrame:
             valid = grp["real_monthly_rent"].dropna()
             yoy = valid.pct_change(12).dropna().tail(6)
             if len(yoy) < 3:
-                print(f"  WARN: {region} — fewer than 3 valid YoY obs; skipping extrapolation")
+                print(
+                    f"  WARN: {region} — fewer than 3 valid YoY obs; skipping extrapolation")
                 continue
             avg_yoy = float(yoy.mean())
             # Anchor: same calendar month one year prior
             prior_date = MODEL_END - pd.DateOffset(years=1)
             prior_date_ts = pd.Timestamp(prior_date).replace(day=1)
             if (region, prior_date_ts) not in df.index:
-                print(f"  WARN: {region} — prior-year anchor {prior_date_ts:%Y-%m-%d} missing; skipping")
+                print(
+                    f"  WARN: {region} — prior-year anchor {prior_date_ts:%Y-%m-%d} missing; skipping")
                 continue
             prior_val = df.loc[(region, prior_date_ts), "real_monthly_rent"]
             if pd.isna(prior_val):
-                print(f"  WARN: {region} — prior-year rent is NaN; skipping extrapolation")
+                print(
+                    f"  WARN: {region} — prior-year rent is NaN; skipping extrapolation")
                 continue
             extrap_val = float(prior_val) * (1.0 + avg_yoy)
             df.loc[(region, MODEL_END), "real_monthly_rent"] = extrap_val
@@ -180,7 +199,8 @@ def _extrapolate_terminal_rent(df: pd.DataFrame) -> pd.DataFrame:
                 if "log_ptr" in df.columns and np.isfinite(df.loc[(region, MODEL_END), "price_to_rent"]):
                     import math
                     df.loc[(region, MODEL_END), "log_ptr"] = \
-                        math.log(max(df.loc[(region, MODEL_END), "price_to_rent"], 1e-6))
+                        math.log(
+                            max(df.loc[(region, MODEL_END), "price_to_rent"], 1e-6))
             print(
                 f"  Extrapolated from 6m trailing YoY: {region}, "
                 f"{MODEL_END:%Y-%m-%d}, value={extrap_val:.4f}, "
@@ -194,14 +214,15 @@ def _entity_effects(params, train_df, feat_cols):
     y_m = train_df["price_growth"].groupby(level="region").mean()
     X_m = train_df[feat_cols].groupby(level="region").mean()
     const = params.get("const", 0.0)
-    beta  = params.drop("const", errors="ignore")
+    beta = params.drop("const", errors="ignore")
     avail = [c for c in feat_cols if c in beta.index]
     return {r: float(y_m[r] - const - beta[avail] @ X_m.loc[r, avail])
             for r in REGIONS if r in y_m.index and r in X_m.index}
 
+
 def _predict_fe(params, test_df, feat_cols, alpha):
     const = params.get("const", 0.0)
-    beta  = params.drop("const", errors="ignore")
+    beta = params.drop("const", errors="ignore")
     avail = [c for c in feat_cols if c in beta.index and c in test_df.columns]
     preds = np.full(len(test_df), const)
     preds += test_df[avail].values @ beta[avail].values
@@ -209,13 +230,14 @@ def _predict_fe(params, test_df, feat_cols, alpha):
         preds[i] += alpha.get(reg, 0.0)
     return preds
 
+
 def _walk_forward(df, exog_list, stamp_coef=0.0):
-    dates    = df.index.get_level_values("date")
-    exog_wf  = [c for c in exog_list if c != "regime_stamp_duty"]
+    dates = df.index.get_level_values("date")
+    exog_wf = [c for c in exog_list if c != "regime_stamp_duty"]
     train_df = df[dates <= TRAIN_END].dropna(subset=exog_wf + ["price_growth"])
-    test_df  = df[dates >= TEST_START].dropna(subset=exog_wf + ["price_growth"])
-    actual   = test_df["price_growth"].values
-    res_wf   = PanelOLS(
+    test_df = df[dates >= TEST_START].dropna(subset=exog_wf + ["price_growth"])
+    actual = test_df["price_growth"].values
+    res_wf = PanelOLS(
         train_df["price_growth"],
         sm.add_constant(train_df[exog_wf], has_constant="add"),
         entity_effects=True,
@@ -254,14 +276,16 @@ def parse_boe_approvals(df: pd.DataFrame) -> pd.DataFrame:
 
     print(f"  BoE approvals: {len(data)} monthly obs "
           f"({data.index.min():%Y-%m} → {data.index.max():%Y-%m})")
-    print(f"  Range: {data.approvals.min():,.0f} – {data.approvals.max():,.0f}")
+    print(
+        f"  Range: {data.approvals.min():,.0f} – {data.approvals.max():,.0f}")
 
     # Save clean version
     data.reset_index().to_csv(RAW / "boe_mortgage_approvals.csv", index=False)
 
     # Drop any pre-existing approvals columns to prevent _x/_y suffix conflicts
     # when integrate_downloads is re-run against an already-augmented v2 file.
-    _drop = [c for c in ["approvals", "approvals_lag1", "approvals_growth"] if c in df.columns]
+    _drop = [c for c in ["approvals", "approvals_lag1",
+                         "approvals_growth"] if c in df.columns]
     if _drop:
         df = df.drop(columns=_drop)
 
@@ -284,7 +308,8 @@ def parse_boe_approvals(df: pd.DataFrame) -> pd.DataFrame:
     print(f"  approvals_growth: Coef={test['coef']:+.6f}  "
           f"t={test['t_stat']:+.2f}{_stars(test['p_val'])}  "
           f"R²={test['r2_within']:.4f}  corr={corr:.3f}  {sign}")
-    print(f"  ADF median p={adf['median_p']:.4f}  stationary={adf['stationary']}")
+    print(
+        f"  ADF median p={adf['median_p']:.4f}  stationary={adf['stationary']}")
 
     return df, test
 
@@ -304,13 +329,14 @@ def parse_housing_starts(df: pd.DataFrame) -> pd.DataFrame:
     raw.columns = raw.iloc[4]
     raw = raw.iloc[5:].reset_index(drop=True)
     raw = raw.rename(columns={raw.columns[0]: "period",
-                               "All Starts": "all_starts"})
+                              "All Starts": "all_starts"})
     raw = raw[["period", "all_starts"]].dropna(subset=["period"])
 
     # Parse "1978 Q1" → quarter-start date
     def parse_quarter(s):
         s = str(s).strip()
-        if " Q" not in s: return pd.NaT
+        if " Q" not in s:
+            return pd.NaT
         yr, q = s.split(" Q")
         m = {"1": 1, "2": 4, "3": 7, "4": 10}[q.strip()]
         return pd.Timestamp(f"{yr.strip()}-{m:02d}-01")
@@ -335,13 +361,14 @@ def parse_housing_starts(df: pd.DataFrame) -> pd.DataFrame:
 
     # Save
     starts_m.reset_index().rename(columns={"index": "date",
-                                            "all_starts": "housing_starts"}).to_csv(
+                                           "all_starts": "housing_starts"}).to_csv(
         RAW / "mhclg_housing_starts.csv", index=False
     )
 
     # Broadcast to regions
     starts_series = starts_m.rename(columns={"all_starts": "housing_starts"})
-    _drop = [c for c in ["housing_starts", "starts_lag6", "starts_lag12"] if c in df.columns]
+    _drop = [c for c in ["housing_starts", "starts_lag6",
+                         "starts_lag12"] if c in df.columns]
     if _drop:
         df = df.drop(columns=_drop)
     df = df.reset_index()
@@ -349,7 +376,7 @@ def parse_housing_starts(df: pd.DataFrame) -> pd.DataFrame:
                   on="date", how="left")
     df = df.set_index(["region", "date"]).sort_index()
 
-    df["starts_lag6"]  = df.groupby(level="region")["housing_starts"].transform(
+    df["starts_lag6"] = df.groupby(level="region")["housing_starts"].transform(
         lambda s: s.shift(6))
     df["starts_lag12"] = df.groupby(level="region")["housing_starts"].transform(
         lambda s: s.shift(12))
@@ -362,7 +389,7 @@ def parse_housing_starts(df: pd.DataFrame) -> pd.DataFrame:
               f"t={test['t_stat']:+.2f}{_stars(test['p_val'])}  "
               f"R²={test['r2_within']:.4f}  {sign}")
 
-    test_s6  = _univariate_test(df, "starts_lag6")
+    test_s6 = _univariate_test(df, "starts_lag6")
     test_s12 = _univariate_test(df, "starts_lag12")
     return df, test_s6, test_s12
 
@@ -395,7 +422,8 @@ def _parse_rolling_quarter(s: str) -> pd.Timestamp | None:
     """
     try:
         parts = str(s).strip().split()
-        if len(parts) != 2: return None
+        if len(parts) != 2:
+            return None
         months_str, year = parts
         end_month_str = months_str.split("-")[-1]
         dt = pd.to_datetime(f"{end_month_str} {year}", format="%b %Y")
@@ -418,8 +446,8 @@ def parse_regional_unemployment(df: pd.DataFrame) -> pd.DataFrame:
         data_rows = raw.iloc[10:].copy()
         data_rows.columns = range(raw.shape[1])
 
-        dates    = data_rows[0].apply(_parse_rolling_quarter)
-        unemp_r  = pd.to_numeric(data_rows[17], errors="coerce")   # 16-64 rate
+        dates = data_rows[0].apply(_parse_rolling_quarter)
+        unemp_r = pd.to_numeric(data_rows[17], errors="coerce")   # 16-64 rate
 
         region_df = pd.DataFrame({
             "date":              dates.values,
@@ -454,7 +482,8 @@ def parse_regional_unemployment(df: pd.DataFrame) -> pd.DataFrame:
     unemp_monthly.to_csv(RAW / "ons_regional_unemployment.csv", index=False)
 
     # Merge into df
-    _drop = [c for c in ["unemployment_rate", "unemployment_diff", "unemployment_lag1"] if c in df.columns]
+    _drop = [c for c in ["unemployment_rate", "unemployment_diff",
+                         "unemployment_lag1"] if c in df.columns]
     if _drop:
         df = df.drop(columns=_drop)
     df = df.reset_index()
@@ -472,7 +501,7 @@ def parse_regional_unemployment(df: pd.DataFrame) -> pd.DataFrame:
         test = _univariate_test(df, var)
         sign_ok = test["coef"] < 0
         sign = "✅ correct (-)" if sign_ok else "⚠️ wrong (+)"
-        adf  = _adf_panel(df, var)
+        adf = _adf_panel(df, var)
         print(f"  {var}: Coef={test['coef']:+.6f}  "
               f"t={test['t_stat']:+.2f}{_stars(test['p_val'])}  "
               f"R²={test['r2_within']:.4f}  ADF p={adf['median_p']:.3f}  {sign}")
@@ -516,12 +545,14 @@ def parse_transactions(df: pd.DataFrame) -> pd.DataFrame:
         "UK":               "UK",
     })
 
-    raw["date"] = pd.to_datetime(raw["date_str"], format="%B %Y", errors="coerce")
+    raw["date"] = pd.to_datetime(
+        raw["date_str"], format="%B %Y", errors="coerce")
     raw = raw.dropna(subset=["date"])
     for col in ["England", "Scotland", "Wales", "Northern Ireland", "UK"]:
         raw[col] = pd.to_numeric(raw[col], errors="coerce")
 
-    raw = raw[["date", "England", "Scotland", "Wales", "Northern Ireland", "UK"]]
+    raw = raw[["date", "England", "Scotland",
+               "Wales", "Northern Ireland", "UK"]]
     raw = raw.sort_values("date").set_index("date")
     raw = raw.loc[MODEL_START:MODEL_END]
 
@@ -543,7 +574,8 @@ def parse_transactions(df: pd.DataFrame) -> pd.DataFrame:
 
     txn_df = pd.concat(txn_records, ignore_index=True)
 
-    _drop = [c for c in ["transactions", "transaction_growth", "transactions_lag1"] if c in df.columns]
+    _drop = [c for c in ["transactions", "transaction_growth",
+                         "transactions_lag1"] if c in df.columns]
     if _drop:
         df = df.drop(columns=_drop)
     df = df.reset_index()
@@ -560,7 +592,7 @@ def parse_transactions(df: pd.DataFrame) -> pd.DataFrame:
     for var in ["transaction_growth", "transactions_lag1"]:
         test = _univariate_test(df, var)
         sign = "✅ correct (+)" if test["coef"] > 0 else "⚠️ wrong (-)"
-        adf  = _adf_panel(df, var)
+        adf = _adf_panel(df, var)
         print(f"  {var}: Coef={test['coef']:+.6f}  "
               f"t={test['t_stat']:+.2f}{_stars(test['p_val'])}  "
               f"R²={test['r2_within']:.4f}  ADF p={adf['median_p']:.3f}  {sign}")
@@ -606,24 +638,26 @@ def run_updated_ols(df: pd.DataFrame, add_vars: list[str]) -> None:
     EXOG = [c for c in EXOG if c in df.columns]
 
     clean = df.dropna(subset=EXOG + ["price_growth"])
-    print(f"  Estimation sample: {len(clean):,} obs  |  EXOG ({len(EXOG)}): {add_vars}")
+    print(
+        f"  Estimation sample: {len(clean):,} obs  |  EXOG ({len(EXOG)}): {add_vars}")
 
     y = clean["price_growth"]
     X = sm.add_constant(clean[EXOG], has_constant="add")
 
-    model  = PanelOLS(y, X, entity_effects=True)
-    res    = model.fit(cov_type="kernel", kernel="bartlett", bandwidth=12)
-    dk_se  = _driscoll_kraay_se(res, X)
+    model = PanelOLS(y, X, entity_effects=True)
+    res = model.fit(cov_type="kernel", kernel="bartlett", bandwidth=12)
+    dk_se = _driscoll_kraay_se(res, X)
     dk_map = dict(zip(X.columns, dk_se))
 
     print(f"\n  {'Variable':<30} {'Coef':>12} {'DK SE':>10} {'t':>7} {'':>5}")
     print(f"  {'─'*30} {'─'*12} {'─'*10} {'─'*7} {'─'*5}")
     for var in SPEC_B_BASE + add_vars:
-        if var not in df.columns: continue
-        c  = res.params.get(var, np.nan)
+        if var not in df.columns:
+            continue
+        c = res.params.get(var, np.nan)
         se = dk_map.get(var, np.nan)
-        t  = c / se if (not np.isnan(se) and se > 0) else np.nan
-        p  = 2 * (1 - sp_stats.norm.cdf(abs(t))) if not np.isnan(t) else np.nan
+        t = c / se if (not np.isnan(se) and se > 0) else np.nan
+        p = 2 * (1 - sp_stats.norm.cdf(abs(t))) if not np.isnan(t) else np.nan
         sig = _stars(p) if not np.isnan(p) else ""
         print(f"  {var:<30} {c:>+12.6f} {se:>10.6f} {t:>+7.2f} {sig:>5}")
 
@@ -632,7 +666,8 @@ def run_updated_ols(df: pd.DataFrame, add_vars: list[str]) -> None:
     # Walk-forward
     stamp_c = float(res.params.get("regime_stamp_duty", 0.0))
     rmse, mae, da = _walk_forward(df, EXOG, stamp_c)
-    print(f"  Walk-forward RMSE = {rmse:.5f}  MAE = {mae:.5f}  DirAcc = {da:.1f}%")
+    print(
+        f"  Walk-forward RMSE = {rmse:.5f}  MAE = {mae:.5f}  DirAcc = {da:.1f}%")
     print(f"  Old Spec B RMSE   = {OLD_V2_RMSE:.5f}")
 
     if rmse < OLD_V2_RMSE:
@@ -672,10 +707,10 @@ def main():
         df["rent_extrapolated"] = False
 
     # ── Parse each file ───────────────────────────────────────────────────────
-    df, test_appr                = parse_boe_approvals(df)
-    df, test_s6, test_s12        = parse_housing_starts(df)
-    df, test_udiff, test_ulag1   = parse_regional_unemployment(df)
-    df, test_txn                 = parse_transactions(df)
+    df, test_appr = parse_boe_approvals(df)
+    df, test_s6, test_s12 = parse_housing_starts(df)
+    df, test_udiff, test_ulag1 = parse_regional_unemployment(df)
+    df, test_txn = parse_transactions(df)
     inspect_p153()
 
     # ── Extrapolate terminal-month rent for any region with NaN at MODEL_END ──
@@ -686,7 +721,8 @@ def main():
     _h("VARIABLE SELECTION FROM DOWNLOADED DATA")
 
     candidates = {
-        "approvals_growth":    (test_appr,  True,   "positive"),   # pos expected
+        # pos expected
+        "approvals_growth":    (test_appr,  True,   "positive"),
         "starts_lag6":         (test_s6,    False,  "negative"),
         "starts_lag12":        (test_s12,   False,  "negative"),
         "unemployment_diff":   (test_udiff, False,  "negative"),
@@ -694,36 +730,41 @@ def main():
         "transaction_growth":  (test_txn,   True,   "positive"),
     }
 
-    add_vars    = []
+    add_vars = []
     reject_vars = []
 
-    print(f"  {'Variable':<25} {'Coef':>10} {'t':>7} {'|t|>2':>7} {'Sign':>7} {'Include':>8}")
+    print(
+        f"  {'Variable':<25} {'Coef':>10} {'t':>7} {'|t|>2':>7} {'Sign':>7} {'Include':>8}")
     print(f"  {'─'*25} {'─'*10} {'─'*7} {'─'*7} {'─'*7} {'─'*8}")
 
     for var, (test, pos_expected, sign_label) in candidates.items():
         if var not in df.columns:
             continue
-        c  = test["coef"]
-        t  = test["t_stat"]
+        c = test["coef"]
+        t = test["t_stat"]
         if np.isnan(c) or np.isnan(t):
             reject_vars.append((var, "no valid estimate"))
             continue
-        t_ok   = abs(t) > 2.0
+        t_ok = abs(t) > 2.0
         sign_ok = (c > 0) if pos_expected else (c < 0)
         include = t_ok and sign_ok
-        t_flag  = "✅" if t_ok   else "❌"
-        s_flag  = "✅" if sign_ok else "❌"
-        i_flag  = "✅ YES" if include else "❌ NO"
-        print(f"  {var:<25} {c:>+10.4f} {t:>+7.2f} {t_flag:>7} {s_flag:>7} {i_flag:>8}")
+        t_flag = "✅" if t_ok else "❌"
+        s_flag = "✅" if sign_ok else "❌"
+        i_flag = "✅ YES" if include else "❌ NO"
+        print(
+            f"  {var:<25} {c:>+10.4f} {t:>+7.2f} {t_flag:>7} {s_flag:>7} {i_flag:>8}")
         if include:
             add_vars.append(var)
         else:
             reason = []
-            if not t_ok:   reason.append(f"|t|={abs(t):.2f} < 2.0")
-            if not sign_ok: reason.append(f"wrong sign (coef={c:+.4f})")
+            if not t_ok:
+                reason.append(f"|t|={abs(t):.2f} < 2.0")
+            if not sign_ok:
+                reason.append(f"wrong sign (coef={c:+.4f})")
             reject_vars.append((var, ", ".join(reason)))
 
-    print(f"\n  INCLUDED: {add_vars if add_vars else ['none — all below threshold']}")
+    print(
+        f"\n  INCLUDED: {add_vars if add_vars else ['none — all below threshold']}")
     for var, reason in reject_vars:
         print(f"  REJECTED: {var} — {reason}")
 
@@ -738,9 +779,9 @@ def main():
         # Update sde_parameters_final.csv with any new significant variables
         sde = pd.read_csv(FIN_DIR / "sde_parameters_final.csv")
         for var in add_vars:
-            c  = float(res.params.get(var, np.nan))
+            c = float(res.params.get(var, np.nan))
             se = float(dk_map.get(var, np.nan))
-            sde[f"beta_{var}"]    = c
+            sde[f"beta_{var}"] = c
             sde[f"beta_{var}_se"] = se
         sde["rmse_wf_with_downloads"] = new_rmse
         sde.to_csv(FIN_DIR / "sde_parameters_final.csv", index=False)

@@ -55,9 +55,11 @@ def ensure_bounds(
 ) -> None:
     series = pd.to_numeric(df[column], errors="coerce")
     if lower is not None and (series < lower).any():
-        raise DatasetValidationError(f"{dataset_name}.{column} has values below {lower}")
+        raise DatasetValidationError(
+            f"{dataset_name}.{column} has values below {lower}")
     if upper is not None and (series > upper).any():
-        raise DatasetValidationError(f"{dataset_name}.{column} has values above {upper}")
+        raise DatasetValidationError(
+            f"{dataset_name}.{column} has values above {upper}")
 
 
 def validate_master_dataset(df: pd.DataFrame, expected_regions: list[str]) -> ValidationResult:
@@ -83,9 +85,11 @@ def validate_master_dataset(df: pd.DataFrame, expected_regions: list[str]) -> Va
         obs_date = pd.to_datetime(df["earnings_obs_date"], errors="coerce")
         date = pd.to_datetime(df["date"], errors="coerce")
         if (obs_date > date).any():
-            raise DatasetValidationError("master_dataset.earnings_obs_date contains future leakage relative to panel date")
+            raise DatasetValidationError(
+                "master_dataset.earnings_obs_date contains future leakage relative to panel date")
     if "earnings_staleness_months" in df.columns:
-        ensure_bounds(df, "master_dataset", "earnings_staleness_months", lower=0.0, upper=24.0)
+        ensure_bounds(df, "master_dataset",
+                      "earnings_staleness_months", lower=0.0, upper=24.0)
     return result
 
 
@@ -117,7 +121,8 @@ def validate_stage5_summary(df: pd.DataFrame, expected_regions: list[str]) -> Va
     )
     ensure_unique_key(df, "stage5_summary", ["scenario", "region"])
     ensure_expected_regions(df, "stage5_summary", expected_regions)
-    ensure_bounds(df, "stage5_summary", "prob_terminal_loss_10pct", lower=0.0, upper=1.0)
+    ensure_bounds(df, "stage5_summary",
+                  "prob_terminal_loss_10pct", lower=0.0, upper=1.0)
     return result
 
 
@@ -138,7 +143,9 @@ def validate_stage6_handoff(df: pd.DataFrame, expected_regions: list[str]) -> Va
     )
     ensure_unique_key(df, "stage6_handoff", ["region"])
     ensure_expected_regions(df, "stage6_handoff", expected_regions)
-    ensure_bounds(df, "stage6_handoff", "consumer_score", lower=0.0, upper=100.0)
+    ensure_bounds(df, "stage6_handoff", "consumer_score",
+                  lower=0.0, upper=100.0)
     ensure_bounds(df, "stage6_handoff", "reit_score", lower=0.0, upper=100.0)
-    ensure_bounds(df, "stage6_handoff", "p_terminal_loss_10_avg", lower=0.0, upper=1.0)
+    ensure_bounds(df, "stage6_handoff",
+                  "p_terminal_loss_10_avg", lower=0.0, upper=1.0)
     return result

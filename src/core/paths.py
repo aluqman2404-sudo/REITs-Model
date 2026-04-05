@@ -18,8 +18,10 @@ STAGE6_OUTPUT_DIR = OUTPUT_DATA_DIR / "stage6"
 STAGE7_OUTPUT_DIR = OUTPUT_DATA_DIR / "stage7"
 CANONICAL_PANEL_PATH = PROCESSED_DATA_DIR / "master_dataset_canonical.csv"
 DESCRIPTIVE_PANEL_PATH = PROCESSED_DATA_DIR / "descriptive_market_panel.csv"
-CANONICAL_PANEL_METADATA_PATH = METADATA_OUTPUT_DIR / "canonical_panel_metadata.json"
-DESCRIPTIVE_PANEL_METADATA_PATH = METADATA_OUTPUT_DIR / "descriptive_panel_metadata.json"
+CANONICAL_PANEL_METADATA_PATH = METADATA_OUTPUT_DIR / \
+    "canonical_panel_metadata.json"
+DESCRIPTIVE_PANEL_METADATA_PATH = METADATA_OUTPUT_DIR / \
+    "descriptive_panel_metadata.json"
 UI_DIR = ROOT_DIR / "src" / "ui"
 UI_ASSETS_DIR = UI_DIR / "assets"
 ARCHIVE_DIR = ROOT_DIR / "archive"

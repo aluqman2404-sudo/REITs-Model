@@ -19,7 +19,7 @@ from datetime import datetime
 from config.settings import DATA_RAW, PARAMS
 
 _START_YEAR = PARAMS["project"]["base_year"]   # 2000
-_REGIONS    = PARAMS["project"]["regions"]
+_REGIONS = PARAMS["project"]["regions"]
 
 _HEADERS = {
     "User-Agent": (
@@ -95,7 +95,8 @@ def fetch_ons_earnings(save: bool = True) -> pd.DataFrame:
     df["median_annual_earnings"] = df["value"] * 52
     df["region"] = "United Kingdom"
     df = df[df["date"].dt.year >= _START_YEAR]
-    df = df[["date", "region", "median_annual_earnings"]].reset_index(drop=True)
+    df = df[["date", "region", "median_annual_earnings"]
+            ].reset_index(drop=True)
 
     if save:
         path = DATA_RAW / f"ons_earnings_{datetime.today():%Y%m}.csv"
@@ -137,7 +138,8 @@ def fetch_ons_earnings_regional(save: bool = True) -> pd.DataFrame:
             r.raise_for_status()
             df = _parse_ashe_regional(r.text)
             if save:
-                path = DATA_RAW / f"ons_earnings_regional_{datetime.today():%Y%m}.csv"
+                path = DATA_RAW / \
+                    f"ons_earnings_regional_{datetime.today():%Y%m}.csv"
                 df.to_csv(path, index=False)
                 print(f"  Saved {len(df):,} rows → {path.name}")
                 from src.ingestion.release_metadata import write_release_metadata
@@ -220,7 +222,8 @@ def fetch_ons_series(dataset_id: str, series_id: str, freq: str = "months", save
     uri = f"/economy/timeseries/{series_id}/{dataset_id}"
     df = _fetch_generator(uri)
     if save:
-        path = DATA_RAW / f"ons_{dataset_id}_{series_id}_{datetime.today():%Y%m}.csv"
+        path = DATA_RAW / \
+            f"ons_{dataset_id}_{series_id}_{datetime.today():%Y%m}.csv"
         df.to_csv(path, index=False)
     return df
 
@@ -263,11 +266,12 @@ def _fetch_generator(uri: str, freq: str = "monthly") -> pd.DataFrame:
         raise ValueError(f"No data rows found in ONS response for {uri}")
 
     records = []
-    _MONTHS = {"JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"}
+    _MONTHS = {"JAN", "FEB", "MAR", "APR", "MAY",
+               "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"}
 
     for row in data_rows:
         date_str = row[0].strip()
-        val_str  = row[1].strip()
+        val_str = row[1].strip()
 
         # Classify row type
         parts = date_str.upper().split()
@@ -284,7 +288,7 @@ def _fetch_generator(uri: str, freq: str = "monthly") -> pd.DataFrame:
             continue
 
         try:
-            date  = _parse_ons_date(date_str, row_freq)
+            date = _parse_ons_date(date_str, row_freq)
             value = float(val_str)
             records.append({"date": date, "value": value})
         except (ValueError, TypeError):
@@ -321,12 +325,13 @@ def _parse_ashe_regional(text: str) -> pd.DataFrame:
     """Parse ASHE Table 7 regional earnings CSV into long format."""
     raw = pd.read_csv(io.StringIO(text), skiprows=4, low_memory=False)
     region_col = raw.columns[0]
-    year_cols  = [c for c in raw.columns[1:] if str(c).strip().isdigit()]
+    year_cols = [c for c in raw.columns[1:] if str(c).strip().isdigit()]
 
     df = raw[[region_col] + year_cols].copy()
     df = df.rename(columns={region_col: "region"})
     df = df[df["region"].isin(_REGIONS)]
-    df = df.melt(id_vars="region", var_name="year", value_name="median_annual_earnings")
+    df = df.melt(id_vars="region", var_name="year",
+                 value_name="median_annual_earnings")
     df["date"] = pd.to_datetime(df["year"].astype(str) + "-04-01")
     df["median_annual_earnings"] = pd.to_numeric(
         df["median_annual_earnings"].astype(str).str.replace(",", ""), errors="coerce"
@@ -338,12 +343,13 @@ def _parse_ashe_regional(text: str) -> pd.DataFrame:
 
 def _parse_population_csv(content: bytes) -> pd.DataFrame:
     """Parse ONS population estimates CSV into long format."""
-    import numpy as np
     for skip in range(4, 12):
         try:
-            raw = pd.read_csv(io.BytesIO(content), skiprows=skip, low_memory=False)
+            raw = pd.read_csv(io.BytesIO(content),
+                              skiprows=skip, low_memory=False)
             region_col = raw.columns[0]
-            year_cols  = [c for c in raw.columns[1:] if str(c).strip().isdigit()]
+            year_cols = [c for c in raw.columns[1:]
+                         if str(c).strip().isdigit()]
             if len(year_cols) > 5:
                 break
         except Exception:
@@ -353,7 +359,7 @@ def _parse_population_csv(content: bytes) -> pd.DataFrame:
     df = df.rename(columns={region_col: "region"})
     df = df[df["region"].isin(_REGIONS)]
     df = df.melt(id_vars="region", var_name="year", value_name="population")
-    df["date"]       = pd.to_datetime(df["year"].astype(str) + "-06-30")
+    df["date"] = pd.to_datetime(df["year"].astype(str) + "-06-30")
     df["population"] = pd.to_numeric(
         df["population"].astype(str).str.replace(",", ""), errors="coerce"
     )

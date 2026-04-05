@@ -14,7 +14,6 @@ Output:
 from __future__ import annotations
 
 import json
-import sys
 import warnings
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,7 +24,8 @@ import statsmodels.api as sm
 
 ROOT = Path(__file__).resolve().parents[2]
 PANEL_PATH = ROOT / "data" / "processed" / "master_dataset_canonical.csv"
-SDE_PARAMS_PATH = ROOT / "data" / "outputs" / "stage4_final" / "sde_parameters_bankgrade.csv"
+SDE_PARAMS_PATH = ROOT / "data" / "outputs" / \
+    "stage4_final" / "sde_parameters_bankgrade.csv"
 OUTPUT_DIR = ROOT / "data" / "outputs" / "validation"
 OUTPUT_PATH = OUTPUT_DIR / "sensitivity_analysis.json"
 
@@ -48,12 +48,12 @@ SHOCKS = {
 }
 
 EXPECTED_SIGNS = {
-    "income_plus10pct":  +1,   # Higher income → higher P*
+    "income_plus10pct": +1,   # Higher income → higher P*
     "income_minus10pct": -1,
-    "rates_plus100bp":   -1,   # Higher rates → lower P* (affordability headwind)
-    "rates_minus100bp":  +1,
-    "rent_plus10pct":    +1,   # Higher rent → higher P* (rental parity)
-    "rent_minus10pct":   -1,
+    "rates_plus100bp": -1,   # Higher rates → lower P* (affordability headwind)
+    "rates_minus100bp": +1,
+    "rent_plus10pct": +1,   # Higher rent → higher P* (rental parity)
+    "rent_minus10pct": -1,
 }
 
 INTERPRETATIONS = {
@@ -74,9 +74,11 @@ def run_sensitivity_analysis() -> dict:
 
     # Fit OLS on anchor months
     sample = panel[panel["date"].dt.month.isin(ANCHOR_MONTHS)].copy()
-    sample = sample.dropna(subset=["log_real_price", *REGRESSORS]).reset_index(drop=True)
+    sample = sample.dropna(
+        subset=["log_real_price", *REGRESSORS]).reset_index(drop=True)
 
-    region_dummies = pd.get_dummies(sample["region"], prefix="region", drop_first=True, dtype=float)
+    region_dummies = pd.get_dummies(
+        sample["region"], prefix="region", drop_first=True, dtype=float)
     X = pd.concat([sample[REGRESSORS].astype(float), region_dummies], axis=1)
     X = sm.add_constant(X, has_constant="add")
     fit = sm.OLS(sample["log_real_price"], X).fit(cov_type="HC3")
@@ -98,7 +100,8 @@ def run_sensitivity_analysis() -> dict:
 
     # Build region dummies consistent with training
     dummy_cols = [c for c in fit.params.index if c.startswith("region_")]
-    latest_dummies = pd.DataFrame(0.0, index=latest_by_region.index, columns=dummy_cols)
+    latest_dummies = pd.DataFrame(
+        0.0, index=latest_by_region.index, columns=dummy_cols)
     for col in dummy_cols:
         region_name = col.replace("region_", "")
         mask = latest_by_region["region"].str.replace(" ", "_") == region_name
@@ -111,9 +114,11 @@ def run_sensitivity_analysis() -> dict:
             latest_dummies.loc[mask, col] = 1.0
 
     # Also build region dummies using pandas get_dummies approach
-    full_dummies = pd.get_dummies(latest_by_region["region"], prefix="region", drop_first=False, dtype=float)
+    full_dummies = pd.get_dummies(
+        latest_by_region["region"], prefix="region", drop_first=False, dtype=float)
     # Remap to training dummy columns
-    latest_dummies2 = pd.DataFrame(0.0, index=latest_by_region.index, columns=dummy_cols)
+    latest_dummies2 = pd.DataFrame(
+        0.0, index=latest_by_region.index, columns=dummy_cols)
     for col in dummy_cols:
         if col in full_dummies.columns:
             latest_dummies2[col] = full_dummies[col].values
@@ -147,13 +152,15 @@ def run_sensitivity_analysis() -> dict:
 
         for i, row in latest_by_region.reset_index(drop=True).iterrows():
             region = row["region"]
-            pct_chg = float((np.exp(shocked_log_p_star[i] - baseline_log_p_star[i]) - 1.0) * 100.0)
+            pct_chg = float(
+                (np.exp(shocked_log_p_star[i] - baseline_log_p_star[i]) - 1.0) * 100.0)
             pct_changes[region] = round(pct_chg, 4)
 
             # Check sign
             actual_sign = np.sign(pct_chg)
             if actual_sign != 0 and actual_sign != expected_sign:
-                sign_violations.append(f"{shock_name}:{region} sign={actual_sign:+.0f} expected={expected_sign:+.0f}")
+                sign_violations.append(
+                    f"{shock_name}:{region} sign={actual_sign:+.0f} expected={expected_sign:+.0f}")
 
         results[shock_name] = pct_changes
         avg = np.mean(list(pct_changes.values()))

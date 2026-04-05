@@ -15,15 +15,16 @@ data/outputs/validation/scoring_backtest_curve.png
 """
 
 from __future__ import annotations
+from src.core.paths import STAGE4_OUTPUT_DIR, OUTPUT_DATA_DIR, ensure_directory
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 
 import sys
 from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
 
 # ---------------------------------------------------------------------------
 # Path bootstrap (run as script or imported from project root)
@@ -32,7 +33,6 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.core.paths import STAGE4_OUTPUT_DIR, OUTPUT_DATA_DIR, ensure_directory
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -70,7 +70,7 @@ def compute_valuation_signal(fair_value_gap_log: pd.Series) -> pd.Series:
 
 def _compound_forward_return(price_growth: np.ndarray, start: int, n_months: int) -> float:
     """Compound n_months of monthly returns starting one period after `start`."""
-    window = price_growth[start + 1 : start + 1 + n_months]
+    window = price_growth[start + 1: start + 1 + n_months]
     if len(window) < n_months or np.any(np.isnan(window)):
         return np.nan
     return float(np.prod(1.0 + window) - 1.0)
@@ -85,7 +85,8 @@ def compute_forward_returns(panel: pd.DataFrame) -> pd.DataFrame:
         for i in range(len(grp)):
             row = grp.iloc[i].to_dict()
             for h in HORIZONS:
-                row[f"forward_{h}m_return"] = _compound_forward_return(growth, i, h)
+                row[f"forward_{h}m_return"] = _compound_forward_return(
+                    growth, i, h)
             records.append(row)
     return pd.DataFrame(records)
 
@@ -134,14 +135,18 @@ def compute_threshold_metrics(df: pd.DataFrame) -> pd.DataFrame:
         below = ~above
 
         prec_36, rec_36 = _precision_recall(signal, fwd_primary, thr)
-        prec_12, rec_12 = _precision_recall(signal, df["forward_12m_return"], thr)
-        prec_24, rec_24 = _precision_recall(signal, df["forward_24m_return"], thr)
+        prec_12, rec_12 = _precision_recall(
+            signal, df["forward_12m_return"], thr)
+        prec_24, rec_24 = _precision_recall(
+            signal, df["forward_24m_return"], thr)
 
         n_supportive = int(above.sum())
         n_cautious = int(below.sum())
 
-        mean_sup = float(fwd_primary[above].mean()) if n_supportive > 0 else np.nan
-        mean_cau = float(fwd_primary[below].mean()) if n_cautious > 0 else np.nan
+        mean_sup = float(fwd_primary[above].mean()
+                         ) if n_supportive > 0 else np.nan
+        mean_cau = float(fwd_primary[below].mean()
+                         ) if n_cautious > 0 else np.nan
 
         if np.isnan(mean_sup) or np.isnan(mean_cau) or std_all == 0:
             ir = np.nan
@@ -150,8 +155,10 @@ def compute_threshold_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
         # Downside (Cautious) metrics — only for CAUTIOUS_THRESHOLDS
         if thr in CAUTIOUS_THRESHOLDS:
-            prec_cau, rec_cau = _precision_recall_cautious(signal, fwd_primary, thr)
-            ir_cau = (mean_cau - mean_sup) / std_all if not (np.isnan(mean_cau) or np.isnan(mean_sup) or std_all == 0) else np.nan
+            prec_cau, rec_cau = _precision_recall_cautious(
+                signal, fwd_primary, thr)
+            ir_cau = (mean_cau - mean_sup) / std_all if not (np.isnan(mean_cau) or
+                                                             np.isnan(mean_sup) or std_all == 0) else np.nan
         else:
             prec_cau = rec_cau = ir_cau = np.nan
 
@@ -199,8 +206,10 @@ def plot_precision_recall(metrics: pd.DataFrame, out_path: Path) -> None:
             fontsize=8,
             color="#333333",
         )
-    ax.set_xlabel("Recall (fraction of positive-return periods caught)", fontsize=10)
-    ax.set_ylabel("Precision (P[36m return > 0 | signal ≥ threshold])", fontsize=10)
+    ax.set_xlabel(
+        "Recall (fraction of positive-return periods caught)", fontsize=10)
+    ax.set_ylabel(
+        "Precision (P[36m return > 0 | signal ≥ threshold])", fontsize=10)
     ax.set_title(
         "Valuation Signal — Precision / Recall at 36-month horizon\n"
         "Threshold sweep: 30 → 70 in steps of 5",
@@ -230,16 +239,20 @@ def run() -> pd.DataFrame:
     print(f"  Raw rows: {len(panel)}")
 
     # 2. Compute valuation signal
-    panel["valuation_signal"] = compute_valuation_signal(panel["fair_value_gap_log"])
+    panel["valuation_signal"] = compute_valuation_signal(
+        panel["fair_value_gap_log"])
 
     # 3. Compute forward returns
     print("Computing forward returns (12m / 24m / 36m) …")
     panel = compute_forward_returns(panel)
 
     # 4. Filter to rows with complete 36m forward window
-    keep_cols = ["forward_12m_return", "forward_24m_return", "forward_36m_return"]
-    panel_filtered = panel.dropna(subset=keep_cols + ["valuation_signal", "fair_value_gap_log"])
-    print(f"  Rows with ≥36m subsequent data and valid signal: {len(panel_filtered)}")
+    keep_cols = ["forward_12m_return",
+                 "forward_24m_return", "forward_36m_return"]
+    panel_filtered = panel.dropna(
+        subset=keep_cols + ["valuation_signal", "fair_value_gap_log"])
+    print(
+        f"  Rows with ≥36m subsequent data and valid signal: {len(panel_filtered)}")
 
     # 5. Threshold sweep
     print("Running threshold sweep …")
@@ -320,7 +333,8 @@ def backtest_c2_downside(
         "region", "date", "predicted_downside_flag",
         "realised_decline", "correct_direction",
     ]
-    EMPTY_SUMMARY: dict = {"accuracy": np.nan, "precision": np.nan, "recall": np.nan}
+    EMPTY_SUMMARY: dict = {"accuracy": np.nan,
+                           "precision": np.nan, "recall": np.nan}
 
     if SIGNAL_COL not in panel_df.columns:
         warnings.warn(
@@ -341,7 +355,8 @@ def backtest_c2_downside(
     records: list[dict] = []
     for region, grp in df.groupby("region", sort=False):
         grp = grp.sort_values("date").reset_index(drop=True)
-        grp = grp.dropna(subset=[SIGNAL_COL, "nominal_house_price"]).reset_index(drop=True)
+        grp = grp.dropna(
+            subset=[SIGNAL_COL, "nominal_house_price"]).reset_index(drop=True)
         prices = grp["nominal_house_price"].to_numpy(dtype=float)
 
         for i in range(len(grp)):
@@ -380,7 +395,7 @@ def backtest_c2_downside(
     summary = {
         "accuracy":  round(accuracy, 4),
         "precision": round(precision, 4) if not np.isnan(precision) else np.nan,
-        "recall":    round(recall, 4)    if not np.isnan(recall)    else np.nan,
+        "recall":    round(recall, 4) if not np.isnan(recall) else np.nan,
     }
     return result_df, summary
 
@@ -535,7 +550,8 @@ def backtest_c4_rental_yield(
         "region", "date", "yield_signal_direction",
         "realised_outperformance", "correct_direction",
     ]
-    EMPTY_SUMMARY: dict = {"accuracy": np.nan, "information_ratio_proxy": np.nan}
+    EMPTY_SUMMARY: dict = {"accuracy": np.nan,
+                           "information_ratio_proxy": np.nan}
 
     signal_col: str | None = None
     for candidate in ("gross_yield_pct", "yield_lag1"):
@@ -569,7 +585,8 @@ def backtest_c4_rental_yield(
     raw_records: list[dict] = []
     for region, grp in df.groupby("region", sort=False):
         grp = grp.sort_values("date").reset_index(drop=True)
-        grp = grp.dropna(subset=[signal_col, "nominal_house_price"]).reset_index(drop=True)
+        grp = grp.dropna(
+            subset=[signal_col, "nominal_house_price"]).reset_index(drop=True)
         yields = grp[signal_col].to_numpy(dtype=float)
         prices = grp["nominal_house_price"].to_numpy(dtype=float)
 
@@ -669,7 +686,8 @@ def backtest_c5_cycle(
         "region", "date", "momentum_signal_direction",
         "realised_continuation", "correct_direction",
     ]
-    EMPTY_SUMMARY: dict = {"accuracy": np.nan, "information_ratio_proxy": np.nan}
+    EMPTY_SUMMARY: dict = {"accuracy": np.nan,
+                           "information_ratio_proxy": np.nan}
 
     signal_col: str | None = None
     for candidate in (
@@ -707,9 +725,10 @@ def backtest_c5_cycle(
     records: list[dict] = []
     for region, grp in df.groupby("region", sort=False):
         grp = grp.sort_values("date").reset_index(drop=True)
-        grp = grp.dropna(subset=[signal_col, "nominal_house_price"]).reset_index(drop=True)
+        grp = grp.dropna(
+            subset=[signal_col, "nominal_house_price"]).reset_index(drop=True)
         signals = grp[signal_col].to_numpy(dtype=float)
-        prices  = grp["nominal_house_price"].to_numpy(dtype=float)
+        prices = grp["nominal_house_price"].to_numpy(dtype=float)
 
         for i in range(len(grp)):
             j = i + horizon_months
@@ -732,8 +751,8 @@ def backtest_c5_cycle(
     if result_df.empty:
         return result_df, EMPTY_SUMMARY
 
-    accuracy  = float(result_df["correct_direction"].mean())
-    ir_proxy  = float((accuracy - 0.5) * np.sqrt(12.0 / max(horizon_months, 1)))
+    accuracy = float(result_df["correct_direction"].mean())
+    ir_proxy = float((accuracy - 0.5) * np.sqrt(12.0 / max(horizon_months, 1)))
 
     summary = {
         "accuracy":                round(accuracy, 4),
@@ -747,10 +766,13 @@ def backtest_c5_cycle(
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    import pandas as pd, json, pathlib, warnings as _w
+    import json
+    import pathlib
+    import warnings as _w
     # Load the canonical panel -- find the correct path by checking src/core/paths.py or config/settings.py
     # The panel is likely at data/outputs/stage4/ or data/processed/
-    panel_path = next(pathlib.Path("data").rglob("master_dataset_canonical.csv"), None)
+    panel_path = next(pathlib.Path("data").rglob(
+        "master_dataset_canonical.csv"), None)
     if panel_path is None:
         panel_path = next(pathlib.Path("data").rglob("*canonical*.csv"), None)
     print(f"Loading panel from: {panel_path}")
@@ -763,7 +785,8 @@ if __name__ == "__main__":
     print(json.dumps(stats_c2, indent=2, default=str))
 
     print("\n=== C3 Affordability Backtest (24m horizon) ===")
-    result_c3, stats_c3 = backtest_c3_affordability(panel_df, horizon_months=24)
+    result_c3, stats_c3 = backtest_c3_affordability(
+        panel_df, horizon_months=24)
     print(json.dumps(stats_c3, indent=2, default=str))
 
     print("\n=== C4 Rental Yield Backtest (24m horizon) ===")
@@ -776,7 +799,7 @@ if __name__ == "__main__":
 
     print("\n=== Summary ===")
     for label, stats in [("C2 Downside", stats_c2), ("C3 Affordability", stats_c3),
-                          ("C4 Rental Yield", stats_c4), ("C5 Cycle", stats_c5)]:
+                         ("C4 Rental Yield", stats_c4), ("C5 Cycle", stats_c5)]:
         acc = stats.get("accuracy")
         acc_str = f"{acc:.1%}" if acc == acc else "N/A"  # NaN check
         print(f"  {label}: accuracy={acc_str}")

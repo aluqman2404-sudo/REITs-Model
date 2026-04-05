@@ -32,8 +32,10 @@ SIMULATION_REPLAY_PATH = VALIDATION_DIR / "simulation_plausibility_replay.csv"
 SCORE_BUCKET_PATH = VALIDATION_DIR / "score_bucket_performance.csv"
 SCORE_CALIBRATION_PATH = VALIDATION_DIR / "score_calibration_diagnostics.csv"
 COMPONENT_SIGNAL_STRENGTH_PATH = VALIDATION_DIR / "component_signal_strength.csv"
-HISTORICAL_VS_SIMULATED_DISTRIBUTION_PATH = VALIDATION_DIR / "historical_vs_simulated_distribution.csv"
-SIMULATION_MOMENT_COMPARISON_PATH = VALIDATION_DIR / "simulation_moment_comparison.csv"
+HISTORICAL_VS_SIMULATED_DISTRIBUTION_PATH = VALIDATION_DIR / \
+    "historical_vs_simulated_distribution.csv"
+SIMULATION_MOMENT_COMPARISON_PATH = VALIDATION_DIR / \
+    "simulation_moment_comparison.csv"
 INDEPENDENT_SUMMARY_PATH = VALIDATION_DIR / "independent_validation_summary.md"
 
 
@@ -61,16 +63,23 @@ def _sha256(path: Path) -> str:
 
 def _artifact_lineage_checks() -> pd.DataFrame:
     config = load_config()
-    panel_metadata = json.loads(CANONICAL_PANEL_METADATA_PATH.read_text(encoding="utf-8"))
+    panel_metadata = json.loads(
+        CANONICAL_PANEL_METADATA_PATH.read_text(encoding="utf-8"))
     artifacts = [
         ("canonical_panel", CANONICAL_PANEL_PATH),
         ("canonical_panel_metadata", CANONICAL_PANEL_METADATA_PATH),
-        ("stage4_parameters", STAGE4_OUTPUT_DIR / config.artifacts.stage4_parameters_file),
-        ("stage4_fair_value_panel", STAGE4_OUTPUT_DIR / "fair_value_panel_bankgrade.csv"),
-        ("stage5_summary", STAGE5_OUTPUT_DIR / config.artifacts.stage5_summary_file),
-        ("stage6_handoff", STAGE6_OUTPUT_DIR / config.artifacts.stage6_handoff_file),
-        ("stage7_snapshot", STAGE7_OUTPUT_DIR / config.artifacts.stage7_snapshot_file),
-        ("stage7_metadata", STAGE7_OUTPUT_DIR / config.artifacts.stage7_metadata_file),
+        ("stage4_parameters", STAGE4_OUTPUT_DIR /
+         config.artifacts.stage4_parameters_file),
+        ("stage4_fair_value_panel", STAGE4_OUTPUT_DIR /
+         "fair_value_panel_bankgrade.csv"),
+        ("stage5_summary", STAGE5_OUTPUT_DIR /
+         config.artifacts.stage5_summary_file),
+        ("stage6_handoff", STAGE6_OUTPUT_DIR /
+         config.artifacts.stage6_handoff_file),
+        ("stage7_snapshot", STAGE7_OUTPUT_DIR /
+         config.artifacts.stage7_snapshot_file),
+        ("stage7_metadata", STAGE7_OUTPUT_DIR /
+         config.artifacts.stage7_metadata_file),
     ]
     rows = []
     for label, path in artifacts:
@@ -108,12 +117,14 @@ def _replay_simulation_plausibility(master: pd.DataFrame, summary: pd.DataFrame)
         grp = group.sort_values("date").reset_index(drop=True)
         forward_returns = np.asarray(
             [
-                (float(grp.loc[index + 60, "nominal_house_price"]) / float(grp.loc[index, "nominal_house_price"]) - 1.0) * 100.0
+                (float(grp.loc[index + 60, "nominal_house_price"]) /
+                 float(grp.loc[index, "nominal_house_price"]) - 1.0) * 100.0
                 for index in range(len(grp) - 60)
             ],
             dtype=float,
         )
-        baseline = summary[(summary["region"] == region) & (summary["scenario"] == "Baseline")].iloc[0]
+        baseline = summary[(summary["region"] == region) & (
+            summary["scenario"] == "Baseline")].iloc[0]
         hist_loss = float(np.mean(forward_returns <= -10.0))
         rows.append(
             {
@@ -127,9 +138,9 @@ def _replay_simulation_plausibility(master: pd.DataFrame, summary: pd.DataFrame)
                 "median_minus_hist_p50": float(baseline["median_5yr_growth"] - np.percentile(forward_returns, 50)),
                 "tail_risk_gap": float(baseline["prob_terminal_loss_10pct"] - hist_loss),
                 "within_hist_10_90_band": bool(
-                    np.percentile(forward_returns, 10)
-                    <= float(baseline["median_5yr_growth"])
-                    <= np.percentile(forward_returns, 90)
+                    np.percentile(forward_returns, 10) <=
+                    float(baseline["median_5yr_growth"]) <=
+                    np.percentile(forward_returns, 90)
                 ),
             }
         )
@@ -147,12 +158,14 @@ def _historical_vs_simulated_distribution(master: pd.DataFrame, summary: pd.Data
         grp = group.sort_values("date").reset_index(drop=True)
         forward_returns = np.asarray(
             [
-                (float(grp.loc[index + 60, "nominal_house_price"]) / float(grp.loc[index, "nominal_house_price"]) - 1.0) * 100.0
+                (float(grp.loc[index + 60, "nominal_house_price"]) /
+                 float(grp.loc[index, "nominal_house_price"]) - 1.0) * 100.0
                 for index in range(len(grp) - 60)
             ],
             dtype=float,
         )
-        baseline = summary[(summary["region"] == region) & (summary["scenario"] == "Baseline")].iloc[0]
+        baseline = summary[(summary["region"] == region) & (
+            summary["scenario"] == "Baseline")].iloc[0]
         simulated = {
             "p10": float(baseline["p10_5yr_growth"]),
             "p25": float(baseline["p25_5yr_growth"]),
@@ -231,8 +244,10 @@ def _historical_vs_simulated_distribution(master: pd.DataFrame, summary: pd.Data
             }
         )
 
-    distribution = pd.DataFrame(distribution_rows).sort_values(["region", "percentile"]).reset_index(drop=True)
-    moments = pd.DataFrame(moment_rows).sort_values("region").reset_index(drop=True)
+    distribution = pd.DataFrame(distribution_rows).sort_values(
+        ["region", "percentile"]).reset_index(drop=True)
+    moments = pd.DataFrame(moment_rows).sort_values(
+        "region").reset_index(drop=True)
     distribution.to_csv(HISTORICAL_VS_SIMULATED_DISTRIBUTION_PATH, index=False)
     moments.to_csv(SIMULATION_MOMENT_COMPARISON_PATH, index=False)
     return distribution, moments
@@ -267,18 +282,22 @@ def _score_bucket_performance(fair_panel: pd.DataFrame) -> tuple[pd.DataFrame, p
     panel = fair_panel.sort_values(["region", "date"]).copy()
     panel["valuation_signal"] = _valuation_signal(panel["fair_value_gap_log"])
     panel["rate_repricing_signal"] = _rate_signal(panel[RATE_FEATURE])
-    panel["transaction_signal"] = _transaction_signal(panel["transaction_growth"])
+    panel["transaction_signal"] = _transaction_signal(
+        panel["transaction_growth"])
     if "financial_stress_excess_lag3" in panel.columns:
-        panel["stress_overlay_signal"] = _stress_overlay_signal(panel["financial_stress_excess_lag3"])
+        panel["stress_overlay_signal"] = _stress_overlay_signal(
+            panel["financial_stress_excess_lag3"])
     else:
-        panel["stress_overlay_signal"] = _stress_overlay_signal(panel["financial_stress_lag3"].sub(10.5).clip(lower=0.0))
+        panel["stress_overlay_signal"] = _stress_overlay_signal(
+            panel["financial_stress_lag3"].sub(10.5).clip(lower=0.0))
     panel["valuation_plus_rate_signal"] = (
-        0.80 * panel["valuation_signal"] + 0.20 * panel["rate_repricing_signal"]
+        0.80 * panel["valuation_signal"] +
+        0.20 * panel["rate_repricing_signal"]
     ).clip(lower=0.0, upper=100.0)
     panel["historical_macro_blend_signal"] = (
-        0.70 * panel["valuation_signal"]
-        + 0.15 * panel["rate_repricing_signal"]
-        + 0.15 * panel["transaction_signal"]
+        0.70 * panel["valuation_signal"] +
+        0.15 * panel["rate_repricing_signal"] +
+        0.15 * panel["transaction_signal"]
     ).clip(lower=0.0, upper=100.0)
     signal_map = {
         "valuation_signal": "core_empirical",
@@ -296,11 +315,13 @@ def _score_bucket_performance(fair_panel: pd.DataFrame) -> tuple[pd.DataFrame, p
         returns = []
         for region, group in panel.groupby("region"):
             grp = group.sort_values("date").copy()
-            grp[f"forward_return_{horizon}m"] = grp["nominal_house_price"].shift(-horizon) / grp["nominal_house_price"] - 1.0
+            grp[f"forward_return_{horizon}m"] = grp["nominal_house_price"].shift(
+                -horizon) / grp["nominal_house_price"] - 1.0
             returns.append(grp)
         horizon_panel = pd.concat(returns, ignore_index=True)
         for signal_name, signal_role in signal_map.items():
-            subset = horizon_panel.dropna(subset=[f"forward_return_{horizon}m", signal_name]).copy()
+            subset = horizon_panel.dropna(
+                subset=[f"forward_return_{horizon}m", signal_name]).copy()
             subset["signal_bucket"] = subset[signal_name].map(
                 lambda score: "Supportive" if score >= config.scoring.thresholds.supportive else "Mixed" if score >= config.scoring.thresholds.mixed else "Cautious"
             )
@@ -325,7 +346,8 @@ def _score_bucket_performance(fair_panel: pd.DataFrame) -> tuple[pd.DataFrame, p
             supportive = ordered.loc["Supportive"]
             cautious = ordered.loc["Cautious"]
             spread = float((supportive - cautious) * 100.0)
-            spearman = float(subset[signal_name].corr(subset[f"forward_return_{horizon}m"], method="spearman"))
+            spearman = float(subset[signal_name].corr(
+                subset[f"forward_return_{horizon}m"], method="spearman"))
             monotonic = bool(ordered.is_monotonic_increasing)
             diagnostics.append(
                 {
@@ -356,8 +378,10 @@ def _score_bucket_performance(fair_panel: pd.DataFrame) -> tuple[pd.DataFrame, p
                 }
             )
 
-    performance = pd.DataFrame(rows).sort_values(["signal_name", "horizon_months", "bucket"]).reset_index(drop=True)
-    calibration = pd.DataFrame(diagnostics).sort_values(["signal_name", "horizon_months"]).reset_index(drop=True)
+    performance = pd.DataFrame(rows).sort_values(
+        ["signal_name", "horizon_months", "bucket"]).reset_index(drop=True)
+    calibration = pd.DataFrame(diagnostics).sort_values(
+        ["signal_name", "horizon_months"]).reset_index(drop=True)
     strength = pd.DataFrame(strength_rows).sort_values(
         ["horizon_months", "evidence_level", "supportive_minus_cautious_return_pp"],
         ascending=[True, True, False],
@@ -374,7 +398,8 @@ def _app_consistency_check() -> pd.DataFrame:
     metadata_path = STAGE7_OUTPUT_DIR / config.artifacts.stage7_metadata_file
     snapshot = pd.read_csv(snapshot_path)
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    stage6 = pd.read_csv(STAGE6_OUTPUT_DIR / config.artifacts.stage6_handoff_file)
+    stage6 = pd.read_csv(STAGE6_OUTPUT_DIR /
+                         config.artifacts.stage6_handoff_file)
     rows = [
         {
             "check": "region_snapshot_matches_stage6_rows",
@@ -409,8 +434,9 @@ def _app_consistency_check() -> pd.DataFrame:
         {
             "check": "dashboard_metadata_split_horizon_matches_canonical",
             "passed": int(
-                bool(metadata.get("split_horizon", False))
-                == bool(json.loads(CANONICAL_PANEL_METADATA_PATH.read_text(encoding="utf-8")).get("split_horizon", False))
+                bool(metadata.get("split_horizon", False)) ==
+                bool(json.loads(CANONICAL_PANEL_METADATA_PATH.read_text(
+                    encoding="utf-8")).get("split_horizon", False))
             ),
             "detail": str(metadata.get("split_horizon", False)),
         },
@@ -430,10 +456,13 @@ def _write_summary(
 ) -> None:
     within_band = float(replay["within_hist_10_90_band"].mean())
     avg_tail_gap = float(replay["tail_risk_gap"].mean())
-    strongest = calibration.loc[calibration["supportive_minus_cautious_return_pp"].idxmax()]
+    strongest = calibration.loc[calibration["supportive_minus_cautious_return_pp"].idxmax(
+    )]
     supported = strength[strength["evidence_level"] == "supported"]
-    supported_signals = ", ".join(sorted(supported["signal_name"].unique())) if not supported.empty else "none"
-    pooled_moments = moments[moments["region"] == "UK_12_region_average"].iloc[0]
+    supported_signals = ", ".join(
+        sorted(supported["signal_name"].unique())) if not supported.empty else "none"
+    pooled_moments = moments[moments["region"] ==
+                             "UK_12_region_average"].iloc[0]
     summary = f"""# Independent Validation Summary
 
 Generated: {datetime.now(timezone.utc).isoformat(timespec="seconds")}
@@ -501,12 +530,14 @@ def run_ols_replay_check() -> dict:
         replayed_panel = replayed_fv.fitted_panel.copy()
 
         # Compute replayed fair_value_nominal using 2015-01-01 CPI base
-        cpi_base_rows = replayed_panel[replayed_panel["date"] == pd.Timestamp("2015-01-01")]
+        cpi_base_rows = replayed_panel[replayed_panel["date"] == pd.Timestamp(
+            "2015-01-01")]
         if cpi_base_rows.empty:
             cpi_base = float(replayed_panel["cpi"].iloc[0])
         else:
             cpi_base = float(cpi_base_rows["cpi"].iloc[0])
-        replayed_panel["fair_value_nominal_replayed"] = replayed_panel["fair_value_real"] * (replayed_panel["cpi"] / cpi_base)
+        replayed_panel["fair_value_nominal_replayed"] = replayed_panel["fair_value_real"] * \
+            (replayed_panel["cpi"] / cpi_base)
 
         # Load deployed artifact
         deployed_path = STAGE4_OUTPUT_DIR / "fair_value_panel_bankgrade.csv"
@@ -530,8 +561,8 @@ def run_ols_replay_check() -> dict:
             }
         else:
             deviations = (
-                (merged["fair_value_nominal_replayed"] - merged["fair_value_nominal"]).abs()
-                / merged["fair_value_nominal"].abs()
+                (merged["fair_value_nominal_replayed"] - merged["fair_value_nominal"]).abs() /
+                merged["fair_value_nominal"].abs()
             )
             max_dev = float(deviations.max())
             passed = bool(max_dev < 0.02)
@@ -549,7 +580,8 @@ def run_ols_replay_check() -> dict:
                 "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             }
     except Exception as exc:
-        _warn.warn(f"run_ols_replay_check failed: {exc}", UserWarning, stacklevel=2)
+        _warn.warn(
+            f"run_ols_replay_check failed: {exc}", UserWarning, stacklevel=2)
         result = {
             "replay_max_deviation": None,
             "n_regions": 0,
@@ -559,14 +591,17 @@ def run_ols_replay_check() -> dict:
             "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
 
-    OLS_REPLAY_CHECK_PATH.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    OLS_REPLAY_CHECK_PATH.write_text(
+        json.dumps(result, indent=2), encoding="utf-8")
     return result
 
 
 def run_independent_validation() -> IndependentValidationResult:
     master = pd.read_csv(CANONICAL_PANEL_PATH, parse_dates=["date"])
-    fair_panel = pd.read_csv(STAGE4_OUTPUT_DIR / "fair_value_panel_bankgrade.csv", parse_dates=["date"])
-    summary = pd.read_csv(STAGE5_OUTPUT_DIR / load_config().artifacts.stage5_summary_file)
+    fair_panel = pd.read_csv(
+        STAGE4_OUTPUT_DIR / "fair_value_panel_bankgrade.csv", parse_dates=["date"])
+    summary = pd.read_csv(STAGE5_OUTPUT_DIR /
+                          load_config().artifacts.stage5_summary_file)
 
     lineage = _artifact_lineage_checks()
     replay = _replay_simulation_plausibility(master, summary)
@@ -576,15 +611,18 @@ def run_independent_validation() -> IndependentValidationResult:
     _write_summary(lineage, replay, calibration, strength, moments, app_checks)
 
     return IndependentValidationResult(
-        generated_at_utc=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        generated_at_utc=datetime.now(
+            timezone.utc).isoformat(timespec="seconds"),
         artifact_lineage_path=str(ARTIFACT_LINEAGE_PATH),
         app_consistency_path=str(APP_CONSISTENCY_PATH),
         simulation_replay_path=str(SIMULATION_REPLAY_PATH),
         score_bucket_path=str(SCORE_BUCKET_PATH),
         score_calibration_path=str(SCORE_CALIBRATION_PATH),
         component_signal_strength_path=str(COMPONENT_SIGNAL_STRENGTH_PATH),
-        historical_vs_simulated_distribution_path=str(HISTORICAL_VS_SIMULATED_DISTRIBUTION_PATH),
-        simulation_moment_comparison_path=str(SIMULATION_MOMENT_COMPARISON_PATH),
+        historical_vs_simulated_distribution_path=str(
+            HISTORICAL_VS_SIMULATED_DISTRIBUTION_PATH),
+        simulation_moment_comparison_path=str(
+            SIMULATION_MOMENT_COMPARISON_PATH),
         summary_path=str(INDEPENDENT_SUMMARY_PATH),
     )
 

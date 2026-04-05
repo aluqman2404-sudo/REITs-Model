@@ -26,7 +26,8 @@ from src.core.validation import validate_master_dataset, validate_stage4_paramet
 from src.data.build_canonical_panel import build_canonical_panel
 
 # ── Dashboard data bundle (git-tracked, used on Streamlit Cloud) ──────────
-_DASHBOARD_DATA_DIR: Path = Path(__file__).resolve().parents[2] / "dashboard_data"
+_DASHBOARD_DATA_DIR: Path = Path(
+    __file__).resolve().parents[2] / "dashboard_data"
 
 
 def _resolve(filename: str, original: Path) -> Path:
@@ -105,7 +106,8 @@ def _load_validation_summary(validation_dir: Path) -> dict:
     rate_stability_path = validation_dir / "regional_rate_stability.csv"
     if rate_stability_path.exists():
         rate_stability = pd.read_csv(rate_stability_path)
-        flagged = int(rate_stability.get("flagged_unstable", pd.Series(dtype=bool)).fillna(False).astype(bool).sum())
+        flagged = int(rate_stability.get("flagged_unstable", pd.Series(
+            dtype=bool)).fillna(False).astype(bool).sum())
         summary["rate_stability"] = {
             "regions_tested": int(len(rate_stability)),
             "flagged_unstable_regions": flagged,
@@ -167,8 +169,10 @@ def _build_metadata(
         "scenario_names": load_config().ui.scenario_labels,
     }
 
+
 def _latest_descriptive_context(descriptive_panel: pd.DataFrame, config_regions: list[str]) -> pd.DataFrame:
-    panel = descriptive_panel[descriptive_panel["region"].isin(config_regions)].sort_values(["region", "date"])
+    panel = descriptive_panel[descriptive_panel["region"].isin(
+        config_regions)].sort_values(["region", "date"])
     price_latest = (
         panel.dropna(subset=["descriptive_house_price"])
         .groupby("region", as_index=False)
@@ -207,9 +211,11 @@ def _historical_signal_context(fair_panel: pd.DataFrame, latest: pd.DataFrame) -
     for region, group in fair_panel.groupby("region"):
         grp = group.sort_values("date").reset_index(drop=True)
         latest_row = grp.iloc[-1]
-        valuation_pct = _percentile_rank(grp["fair_value_gap_log"], float(latest_row["fair_value_gap_log"]))
+        valuation_pct = _percentile_rank(
+            grp["fair_value_gap_log"], float(latest_row["fair_value_gap_log"]))
         if "transaction_growth" in grp.columns:
-            cycle_pct = _percentile_rank(grp["transaction_growth"], float(latest_row.get("transaction_growth", 0.0)))
+            cycle_pct = _percentile_rank(grp["transaction_growth"], float(
+                latest_row.get("transaction_growth", 0.0)))
         else:
             cycle_pct = float("nan")
         rows.append(
@@ -222,8 +228,10 @@ def _historical_signal_context(fair_panel: pd.DataFrame, latest: pd.DataFrame) -
     context = pd.DataFrame(rows)
 
     current_latest = latest[["region", "gross_yield_pct"]].copy()
-    current_latest["rent_support_percentile"] = current_latest["gross_yield_pct"].rank(method="average", pct=True) * 100.0
-    context = context.merge(current_latest[["region", "rent_support_percentile"]], on="region", how="left")
+    current_latest["rent_support_percentile"] = current_latest["gross_yield_pct"].rank(
+        method="average", pct=True) * 100.0
+    context = context.merge(
+        current_latest[["region", "rent_support_percentile"]], on="region", how="left")
     return context
 
 
@@ -234,7 +242,8 @@ def write_dashboard_cache(data: DashboardData) -> dict[str, str]:
     metadata_path = STAGE7_OUTPUT_DIR / "dashboard_metadata.json"
 
     data.region_table.to_csv(region_snapshot_path, index=False)
-    metadata_path.write_text(json.dumps(data.metadata, indent=2), encoding="utf-8")
+    metadata_path.write_text(json.dumps(
+        data.metadata, indent=2), encoding="utf-8")
     return {
         "region_snapshot": str(region_snapshot_path),
         "dashboard_metadata": str(metadata_path),
@@ -245,39 +254,54 @@ def write_dashboard_cache(data: DashboardData) -> dict[str, str]:
 def load_dashboard_data() -> DashboardData:
     """Load the validated datasets required by the dashboard."""
     config = load_config()
-    master_path      = _resolve("master_dataset_canonical.csv",    CANONICAL_PANEL_PATH)
-    _meta_path       = _resolve("canonical_panel_metadata.json",   CANONICAL_PANEL_METADATA_PATH)
-    _desc_path       = _resolve("descriptive_market_panel.csv",    DESCRIPTIVE_PANEL_PATH)
-    _desc_meta_path  = _resolve("descriptive_panel_metadata.json", DESCRIPTIVE_PANEL_METADATA_PATH)
+    master_path = _resolve(
+        "master_dataset_canonical.csv",    CANONICAL_PANEL_PATH)
+    _meta_path = _resolve("canonical_panel_metadata.json",
+                          CANONICAL_PANEL_METADATA_PATH)
+    _desc_path = _resolve("descriptive_market_panel.csv",
+                          DESCRIPTIVE_PANEL_PATH)
+    _desc_meta_path = _resolve(
+        "descriptive_panel_metadata.json", DESCRIPTIVE_PANEL_METADATA_PATH)
     if not master_path.exists() or not _meta_path.exists():
         build_canonical_panel()
         master_path = CANONICAL_PANEL_PATH
-        _meta_path  = CANONICAL_PANEL_METADATA_PATH
+        _meta_path = CANONICAL_PANEL_METADATA_PATH
     if not _desc_path.exists() or not _desc_meta_path.exists():
         build_canonical_panel()
-        _desc_path      = DESCRIPTIVE_PANEL_PATH
+        _desc_path = DESCRIPTIVE_PANEL_PATH
         _desc_meta_path = DESCRIPTIVE_PANEL_METADATA_PATH
-    params_path     = _resolve(config.artifacts.stage4_parameters_file, STAGE4_OUTPUT_DIR / config.artifacts.stage4_parameters_file)
-    simulation_path = _resolve(config.artifacts.stage5_summary_file,    STAGE5_OUTPUT_DIR / config.artifacts.stage5_summary_file)
-    handoff_path    = _resolve(config.artifacts.stage6_handoff_file,     STAGE6_OUTPUT_DIR / config.artifacts.stage6_handoff_file)
-    fair_panel_path = _resolve("fair_value_panel_bankgrade.csv",         STAGE4_OUTPUT_DIR / "fair_value_panel_bankgrade.csv")
+    params_path = _resolve(config.artifacts.stage4_parameters_file,
+                           STAGE4_OUTPUT_DIR / config.artifacts.stage4_parameters_file)
+    simulation_path = _resolve(config.artifacts.stage5_summary_file,
+                               STAGE5_OUTPUT_DIR / config.artifacts.stage5_summary_file)
+    handoff_path = _resolve(config.artifacts.stage6_handoff_file,
+                            STAGE6_OUTPUT_DIR / config.artifacts.stage6_handoff_file)
+    fair_panel_path = _resolve("fair_value_panel_bankgrade.csv",
+                               STAGE4_OUTPUT_DIR / "fair_value_panel_bankgrade.csv")
     _std_validation_dir = STAGE7_OUTPUT_DIR.parent / "validation"
-    validation_dir  = _DASHBOARD_DATA_DIR if _DASHBOARD_DATA_DIR.exists() else _std_validation_dir
-    distribution_compare_path = _resolve("historical_vs_simulated_distribution.csv", _std_validation_dir / "historical_vs_simulated_distribution.csv")
-    moment_compare_path       = _resolve("simulation_moment_comparison.csv",          _std_validation_dir / "simulation_moment_comparison.csv")
+    validation_dir = _DASHBOARD_DATA_DIR if _DASHBOARD_DATA_DIR.exists() else _std_validation_dir
+    distribution_compare_path = _resolve(
+        "historical_vs_simulated_distribution.csv", _std_validation_dir / "historical_vs_simulated_distribution.csv")
+    moment_compare_path = _resolve("simulation_moment_comparison.csv",
+                                   _std_validation_dir / "simulation_moment_comparison.csv")
 
-    master = _read_csv(master_path, parse_dates=["date"]).sort_values(["region", "date"]).reset_index(drop=True)
-    fair_panel = _read_csv(fair_panel_path, parse_dates=["date"]).sort_values(["region", "date"]).reset_index(drop=True)
-    descriptive_panel = _read_csv(_desc_path, parse_dates=["date"]).sort_values(["region", "date"]).reset_index(drop=True)
+    master = _read_csv(master_path, parse_dates=["date"]).sort_values(
+        ["region", "date"]).reset_index(drop=True)
+    fair_panel = _read_csv(fair_panel_path, parse_dates=["date"]).sort_values(
+        ["region", "date"]).reset_index(drop=True)
+    descriptive_panel = _read_csv(_desc_path, parse_dates=["date"]).sort_values([
+                                  "region", "date"]).reset_index(drop=True)
     params = _read_csv(params_path)
     simulation = _read_csv(simulation_path)
     distribution_compare = _read_csv(distribution_compare_path)
     moment_compare = _read_csv(moment_compare_path)
     handoff = _read_csv(handoff_path)
     panel_metadata = json.loads(_meta_path.read_text(encoding="utf-8"))
-    descriptive_metadata = json.loads(_desc_meta_path.read_text(encoding="utf-8"))
+    descriptive_metadata = json.loads(
+        _desc_meta_path.read_text(encoding="utf-8"))
     validation_summary = _load_validation_summary(validation_dir)
-    latest_descriptive = _latest_descriptive_context(descriptive_panel, config.project.regions)
+    latest_descriptive = _latest_descriptive_context(
+        descriptive_panel, config.project.regions)
 
     validate_master_dataset(master, config.project.regions)
     validate_stage4_parameters(params, config.project.regions)
@@ -309,7 +333,8 @@ def load_dashboard_data() -> DashboardData:
             hist_stats["hist_price_growth_vol_monthly"] * (12.0 ** 0.5)
         )
 
-    params_keep = ["region", "sigma", "mu_equilibrium", "last_updated", "final_spec_note", "earnings_staleness_months"]
+    params_keep = ["region", "sigma", "mu_equilibrium",
+                   "last_updated", "final_spec_note", "earnings_staleness_months"]
     if "sigma_frequency" in params.columns:
         params_keep.append("sigma_frequency")
     params_subset = params[params_keep].copy()
@@ -353,13 +378,15 @@ def load_dashboard_data() -> DashboardData:
     )
     if "latest_house_price" in region_table.columns:
         region_table["house_price_gap_vs_model_pct"] = (
-            region_table["latest_house_price"] / region_table["nominal_house_price"] - 1.0
+            region_table["latest_house_price"] /
+            region_table["nominal_house_price"] - 1.0
         ) * 100.0
     if hist_stats is not None:
         region_table = region_table.merge(hist_stats, on="region", how="left")
     if "p_terminal_loss_10_avg" in region_table.columns:
         region_table["downside_vulnerability_percentile"] = (
-            region_table["p_terminal_loss_10_avg"].rank(method="average", pct=True) * 100.0
+            region_table["p_terminal_loss_10_avg"].rank(
+                method="average", pct=True) * 100.0
         )
 
     metadata = _build_metadata(
@@ -425,5 +452,6 @@ def get_region_moment_comparison(region: str) -> dict:
     data = load_dashboard_data()
     matched = data.moment_compare[data.moment_compare["region"] == region]
     if matched.empty:
-        raise KeyError(f"Region not found in simulation moment comparison: {region}")
+        raise KeyError(
+            f"Region not found in simulation moment comparison: {region}")
     return matched.iloc[0].to_dict()

@@ -1,6 +1,30 @@
 """Canonical Stage 4-6 rebuild on the canonical historical research panel."""
 
 from __future__ import annotations
+from src.simulation.sde import run_monte_carlo
+from src.scoring.engine import label_score
+from src.model.ols import fit_structural_fair_value
+from src.data.export_stage4_ready_panel import export_stage4_ready_panel
+from src.data.export_stage4_ready_panel import OUTPUT_PATH as STAGE4_PANEL_PATH
+from src.data.build_canonical_panel import build_canonical_panel
+from src.core.paths import (
+    CANONICAL_PANEL_METADATA_PATH,
+    CANONICAL_PANEL_PATH,
+    OUTPUT_DATA_DIR,
+    STAGE4_OUTPUT_DIR,
+    STAGE5_OUTPUT_DIR,
+    STAGE6_OUTPUT_DIR,
+    ensure_directory,
+)
+from src.core.config import load_config
+from statsmodels.stats.diagnostic import acorr_breusch_godfrey, het_breuschpagan
+from scipy import stats as sp_stats
+from linearmodels.panel import PanelOLS
+import statsmodels.graphics.tsaplots as tsaplots
+import statsmodels.api as sm
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 
 import json
 from dataclasses import asdict, dataclass
@@ -9,32 +33,6 @@ from math import log
 
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import statsmodels.api as sm
-import statsmodels.graphics.tsaplots as tsaplots
-from linearmodels.panel import PanelOLS
-from scipy import stats as sp_stats
-from statsmodels.stats.diagnostic import acorr_breusch_godfrey, het_breuschpagan
-
-from src.core.config import load_config
-from src.core.paths import (
-    CANONICAL_PANEL_METADATA_PATH,
-    CANONICAL_PANEL_PATH,
-    OUTPUT_DATA_DIR,
-    PROCESSED_DATA_DIR,
-    STAGE4_OUTPUT_DIR,
-    STAGE5_OUTPUT_DIR,
-    STAGE6_OUTPUT_DIR,
-    ensure_directory,
-)
-from src.data.build_canonical_panel import build_canonical_panel
-from src.data.export_stage4_ready_panel import OUTPUT_PATH as STAGE4_PANEL_PATH
-from src.data.export_stage4_ready_panel import export_stage4_ready_panel
-from src.model.ols import fit_structural_fair_value
-from src.scoring.engine import label_score
-from src.simulation.sde import run_monte_carlo
 
 
 RATE_FEATURE = "mortgage_rate_lag3"
@@ -67,22 +65,26 @@ SHRINKAGE_MONTHS = 60.0
 STAGE4_OUTPUT_PATH = STAGE4_OUTPUT_DIR / "sde_parameters_bankgrade.csv"
 STAGE4_FAIR_VALUE_PANEL_PATH = STAGE4_OUTPUT_DIR / "fair_value_panel_bankgrade.csv"
 STAGE4_DIAGNOSTICS_PATH = STAGE4_OUTPUT_DIR / "canonical_stage4_diagnostics.csv"
-STAGE4_POOLED_COEFFS_PATH = STAGE4_OUTPUT_DIR / "canonical_stage4_pooled_coefficients.csv"
+STAGE4_POOLED_COEFFS_PATH = STAGE4_OUTPUT_DIR / \
+    "canonical_stage4_pooled_coefficients.csv"
 RATE_DIAGNOSTICS_PATH = STAGE4_OUTPUT_DIR / "rate_channel_candidates.csv"
 RESIDUAL_ACF_DIR = ensure_directory(STAGE4_OUTPUT_DIR / "residual_acf")
-STRUCTURAL_BREAK_DIAGNOSTICS_PATH = STAGE4_OUTPUT_DIR / "structural_break_diagnostics.csv"
+STRUCTURAL_BREAK_DIAGNOSTICS_PATH = STAGE4_OUTPUT_DIR / \
+    "structural_break_diagnostics.csv"
 POST2015_PARAMS_PATH = STAGE4_OUTPUT_DIR / "sde_parameters_post2015.csv"
 POST2015_START = pd.Timestamp("2015-01-01")
 CHOW_BREAK_DATES = ["2008-09-01", "2020-03-01", "2022-06-01"]
 STAGE5_OUTPUT_PATH = STAGE5_OUTPUT_DIR / "simulation_summary_bankgrade.csv"
 SIGMA_MAPPING_DIAGNOSTICS_PATH = STAGE5_OUTPUT_DIR / "sigma_mapping_diagnostics.csv"
 SIGMA_CALIBRATION_PATH = STAGE5_OUTPUT_DIR / "sigma_calibration.csv"
-REGION_PLAUSIBILITY_PATH = STAGE5_OUTPUT_DIR / "region_plausibility_diagnostics.csv"
+REGION_PLAUSIBILITY_PATH = STAGE5_OUTPUT_DIR / \
+    "region_plausibility_diagnostics.csv"
 BASELINE_FIT_PATH = STAGE5_OUTPUT_DIR / "baseline_return_model_coefficients.csv"
 STAGE6_OUTPUT_PATH = STAGE6_OUTPUT_DIR / "stage7_handoff_bankgrade.csv"
 PIPELINE_METADATA_PATH = STAGE6_OUTPUT_DIR / "canonical_rebuild_metadata.json"
 VALIDATION_DIR = ensure_directory(OUTPUT_DATA_DIR / "validation")
-SIMULATION_PLAUSIBILITY_REVISED_PATH = VALIDATION_DIR / "simulation_plausibility_revised.csv"
+SIMULATION_PLAUSIBILITY_REVISED_PATH = VALIDATION_DIR / \
+    "simulation_plausibility_revised.csv"
 
 
 @dataclass(frozen=True)
@@ -105,7 +107,8 @@ def _ensure_month_columns(df: pd.DataFrame) -> pd.DataFrame:
     for month in range(2, 13):
         column = f"month_{month}"
         if column not in df.columns:
-            df[column] = (pd.to_datetime(df["date"]).dt.month == month).astype(float)
+            df[column] = (pd.to_datetime(df["date"]).dt.month ==
+                          month).astype(float)
     return df
 
 
@@ -121,20 +124,25 @@ def _add_engineered_features(df: pd.DataFrame) -> pd.DataFrame:
             lambda series: series.rolling(12, min_periods=6).mean()
         )
     if "mortgage_rate_gap_12m_lag1" not in df.columns:
-        df["mortgage_rate_gap_12m_lag1"] = grp["mortgage_rate_gap_12m"].shift(1)
+        df["mortgage_rate_gap_12m_lag1"] = grp["mortgage_rate_gap_12m"].shift(
+            1)
     if "real_mortgage_rate" not in df.columns:
-        inflation_yoy = grp["cpi"].pct_change(12) * 100.0 if "cpi" in df.columns else 0.0
+        inflation_yoy = grp["cpi"].pct_change(
+            12) * 100.0 if "cpi" in df.columns else 0.0
         df["real_mortgage_rate"] = df["mortgage_rate"] - inflation_yoy
     if "real_mortgage_rate_lag1" not in df.columns:
         df["real_mortgage_rate_lag1"] = grp["real_mortgage_rate"].shift(1)
     if EARNINGS_FEATURE not in df.columns:
-        df[EARNINGS_FEATURE] = grp["real_annual_earnings"].pct_change(12).shift(1)
+        df[EARNINGS_FEATURE] = grp["real_annual_earnings"].pct_change(
+            12).shift(1)
     if "payment_burden_gap_lag1" not in df.columns and "payment_burden_gap" in df.columns:
         df["payment_burden_gap_lag1"] = grp["payment_burden_gap"].shift(1)
     if "financial_stress_lag3" in df.columns and STRESS_FEATURE not in df.columns:
-        threshold = float(config.fair_value.financial_stress_activation_threshold)
+        threshold = float(
+            config.fair_value.financial_stress_activation_threshold)
         # Treat financial stress as an episodic overlay, not a continuous structural elasticity.
-        df[STRESS_FEATURE] = (df["financial_stress_lag3"] - threshold).clip(lower=0.0)
+        df[STRESS_FEATURE] = (
+            df["financial_stress_lag3"] - threshold).clip(lower=0.0)
     if "nominal_house_price" in df.columns and "real_annual_earnings" in df.columns:
         if "loan_to_income" not in df.columns:
             # LTI at 4x conventional income multiple anchor: measures how many
@@ -148,7 +156,8 @@ def _add_engineered_features(df: pd.DataFrame) -> pd.DataFrame:
                 .transform(lambda s: s.rolling(120, min_periods=60).mean())
             )
         if "affordability_gap" not in df.columns:
-            df["affordability_gap"] = df["loan_to_income"] - df["lti_rolling_mean_10yr"]
+            df["affordability_gap"] = df["loan_to_income"] - \
+                df["lti_rolling_mean_10yr"]
         if AFFORDABILITY_FEATURE not in df.columns:
             df[AFFORDABILITY_FEATURE] = (
                 df.groupby("region")["affordability_gap"].shift(1)
@@ -168,7 +177,8 @@ def load_model_panel() -> pd.DataFrame:
     """Load the enriched Stage 4-ready panel with canonical features."""
     if not STAGE4_PANEL_PATH.exists():
         export_stage4_ready_panel()
-    panel = pd.read_csv(STAGE4_PANEL_PATH, parse_dates=["date"]).sort_values(["region", "date"]).reset_index(drop=True)
+    panel = pd.read_csv(STAGE4_PANEL_PATH, parse_dates=["date"]).sort_values(
+        ["region", "date"]).reset_index(drop=True)
     return _add_engineered_features(panel)
 
 
@@ -176,7 +186,8 @@ def _rate_channel_diagnostics(panel: pd.DataFrame) -> pd.DataFrame:
     indexed = panel.set_index(["region", "date"]).sort_index()
     diagnostics = []
     # Keep the candidate check aligned with the deployed Stage 4 growth equation.
-    base_features = ["transaction_growth", EARNINGS_FEATURE, "price_growth_lag1", STRESS_FEATURE]
+    base_features = ["transaction_growth", EARNINGS_FEATURE,
+                     "price_growth_lag1", STRESS_FEATURE]
 
     for feature in RATE_CANDIDATES:
         if feature not in indexed.columns:
@@ -189,10 +200,11 @@ def _rate_channel_diagnostics(panel: pd.DataFrame) -> pd.DataFrame:
             "late": ("2015-01-01", "2023-07-01"),
         }.items():
             subset = indexed if bounds is None else indexed[
-                (indexed.index.get_level_values("date") >= bounds[0])
-                & (indexed.index.get_level_values("date") <= bounds[1])
+                (indexed.index.get_level_values("date") >= bounds[0]) &
+                (indexed.index.get_level_values("date") <= bounds[1])
             ]
-            clean = subset.dropna(subset=["price_growth", feature, *base_features, *MONTH_COLUMNS])
+            clean = subset.dropna(
+                subset=["price_growth", feature, *base_features, *MONTH_COLUMNS])
             if clean.empty:
                 row[f"{sample_name}_coef"] = np.nan
                 row[f"{sample_name}_r2"] = np.nan
@@ -200,7 +212,8 @@ def _rate_channel_diagnostics(panel: pd.DataFrame) -> pd.DataFrame:
             try:
                 result = PanelOLS(
                     clean["price_growth"],
-                    sm.add_constant(clean[[feature, *base_features, *MONTH_COLUMNS]], has_constant="add"),
+                    sm.add_constant(
+                        clean[[feature, *base_features, *MONTH_COLUMNS]], has_constant="add"),
                     entity_effects=True,
                     drop_absorbed=True,
                     check_rank=False,
@@ -213,10 +226,12 @@ def _rate_channel_diagnostics(panel: pd.DataFrame) -> pd.DataFrame:
             except Exception:
                 row[f"{sample_name}_coef"] = np.nan
                 row[f"{sample_name}_r2"] = np.nan
-        row["stable_sign"] = bool(len(signs) == 3 and signs[0] == signs[1] == signs[2])
+        row["stable_sign"] = bool(
+            len(signs) == 3 and signs[0] == signs[1] == signs[2])
         diagnostics.append(row)
 
-    result = pd.DataFrame(diagnostics).sort_values(["stable_sign", "feature"], ascending=[False, True]).reset_index(drop=True)
+    result = pd.DataFrame(diagnostics).sort_values(
+        ["stable_sign", "feature"], ascending=[False, True]).reset_index(drop=True)
     result.to_csv(RATE_DIAGNOSTICS_PATH, index=False)
     return result
 
@@ -238,25 +253,27 @@ def _estimate_growth_coefficients(panel: pd.DataFrame) -> tuple[pd.DataFrame, pd
             )
             gap = lti - lti_mean
             indexed = indexed.copy()
-            indexed[AFFORDABILITY_FEATURE] = gap.groupby(level="region").shift(1)
+            indexed[AFFORDABILITY_FEATURE] = gap.groupby(
+                level="region").shift(1)
 
     # Determine the active feature set.  Optional features (SUPPLY, AFFORDABILITY) are
     # included only when they are present with ≥50% non-null coverage.
     supply_available = (
-        SUPPLY_FEATURE in indexed.columns
-        and float(indexed[SUPPLY_FEATURE].notna().mean()) >= 0.50
+        SUPPLY_FEATURE in indexed.columns and
+        float(indexed[SUPPLY_FEATURE].notna().mean()) >= 0.50
     )
     affordability_available = (
-        AFFORDABILITY_FEATURE in indexed.columns
-        and float(indexed[AFFORDABILITY_FEATURE].notna().mean()) >= 0.50
+        AFFORDABILITY_FEATURE in indexed.columns and
+        float(indexed[AFFORDABILITY_FEATURE].notna().mean()) >= 0.50
     )
     inactive = (
-        (set() if supply_available else {SUPPLY_FEATURE})
-        | (set() if affordability_available else {AFFORDABILITY_FEATURE})
+        (set() if supply_available else {SUPPLY_FEATURE}) |
+        (set() if affordability_available else {AFFORDABILITY_FEATURE})
     )
     active_features = [f for f in FEATURE_COLUMNS if f not in inactive]
 
-    clean = indexed.dropna(subset=["price_growth", *active_features, *MONTH_COLUMNS, "real_annual_earnings", "real_monthly_rent", "nominal_house_price"])
+    clean = indexed.dropna(subset=["price_growth", *active_features, *MONTH_COLUMNS,
+                           "real_annual_earnings", "real_monthly_rent", "nominal_house_price"])
 
     pooled_features = active_features + MONTH_COLUMNS
     pooled_model = PanelOLS(
@@ -310,19 +327,23 @@ def _estimate_growth_coefficients(panel: pd.DataFrame) -> tuple[pd.DataFrame, pd
         shrink = len(grp) / (len(grp) + SHRINKAGE_MONTHS)
 
         def shrunk(feature: str) -> float:
-            regional = float(fit.params.get(feature, pooled_lookup.get(feature, 0.0)))
+            regional = float(fit.params.get(
+                feature, pooled_lookup.get(feature, 0.0)))
             pooled = float(pooled_lookup.get(feature, regional))
             return shrink * regional + (1.0 - shrink) * pooled
 
         beta_rate = min(shrunk(RATE_FEATURE), guardrails.beta_rate_max)
-        beta_financial_stress = min(shrunk(STRESS_FEATURE), guardrails.beta_financial_stress_max)
+        beta_financial_stress = min(
+            shrunk(STRESS_FEATURE), guardrails.beta_financial_stress_max)
         beta_income = max(shrunk(EARNINGS_FEATURE), guardrails.beta_income_min)
-        beta_transaction = max(shrunk("transaction_growth"), guardrails.beta_transaction_min)
+        beta_transaction = max(shrunk("transaction_growth"),
+                               guardrails.beta_transaction_min)
         rho = min(shrunk("price_growth_lag1"), guardrails.rho_max)
 
         if supply_available:
             beta_supply_raw = shrunk(SUPPLY_FEATURE)
-            beta_supply = min(beta_supply_raw, 0.0)  # non-positive supply prior
+            # non-positive supply prior
+            beta_supply = min(beta_supply_raw, 0.0)
             beta_supply_se = float(fit.bse.get(SUPPLY_FEATURE, np.nan))
         else:
             beta_supply_raw = np.nan
@@ -334,7 +355,8 @@ def _estimate_growth_coefficients(panel: pd.DataFrame) -> tuple[pd.DataFrame, pd
             # No sign guardrail: the direction is data-driven (high LTI gap is
             # expected to be negative for price growth but regions differ).
             beta_affordability = shrunk(AFFORDABILITY_FEATURE)
-            beta_affordability_se = float(fit.bse.get(AFFORDABILITY_FEATURE, np.nan))
+            beta_affordability_se = float(
+                fit.bse.get(AFFORDABILITY_FEATURE, np.nan))
         else:
             beta_affordability = np.nan
             beta_affordability_se = np.nan
@@ -342,31 +364,38 @@ def _estimate_growth_coefficients(panel: pd.DataFrame) -> tuple[pd.DataFrame, pd
 
         # Flag when the regional estimate contradicts the pooled sign AND the SE is
         # wide enough that the estimate is unreliable.  The estimate is left unchanged.
-        _pooled_aff_sign = np.sign(pooled_lookup.get(AFFORDABILITY_FEATURE, 0.0))
+        _pooled_aff_sign = np.sign(
+            pooled_lookup.get(AFFORDABILITY_FEATURE, 0.0))
         beta_affordability_low_confidence = bool(
-            affordability_available
-            and np.isfinite(beta_affordability)
-            and np.isfinite(beta_affordability_se)
-            and np.sign(beta_affordability) != _pooled_aff_sign
-            and beta_affordability_se > 0.04
+            affordability_available and
+            np.isfinite(beta_affordability) and
+            np.isfinite(beta_affordability_se) and
+            np.sign(beta_affordability) != _pooled_aff_sign and
+            beta_affordability_se > 0.04
         )
 
         price_growth = grp["price_growth"].dropna()
         winsor_lo = float(price_growth.quantile(0.05))
         winsor_hi = float(price_growth.quantile(0.95))
         sigma_raw_annual = float(price_growth.std() * np.sqrt(12.0))
-        sigma_winsor_annual = float(price_growth.clip(winsor_lo, winsor_hi).std() * np.sqrt(12.0))
+        sigma_winsor_annual = float(price_growth.clip(
+            winsor_lo, winsor_hi).std() * np.sqrt(12.0))
         sigma_annual = _clip(
-            guardrails.sigma_raw_weight * sigma_raw_annual + guardrails.sigma_winsor_weight * sigma_winsor_annual,
+            guardrails.sigma_raw_weight * sigma_raw_annual +
+            guardrails.sigma_winsor_weight * sigma_winsor_annual,
             config.fair_value.sigma_floor_annual,
             config.fair_value.sigma_cap_annual,
         )
 
-        earnings_growth = float(grp["real_annual_earnings"].pct_change(12).tail(24).mean())
-        rent_growth = float(grp["real_monthly_rent"].pct_change(12).tail(24).mean())
+        earnings_growth = float(
+            grp["real_annual_earnings"].pct_change(12).tail(24).mean())
+        rent_growth = float(
+            grp["real_monthly_rent"].pct_change(12).tail(24).mean())
         transaction_trend = float(grp["transaction_growth"].tail(24).mean())
-        gamma_current_real = 0.55 * earnings_growth + 0.25 * rent_growth + 0.20 * transaction_trend
-        gamma_long_run_nominal = long_run_nominal_lookup.get(region, gamma_current_real)
+        gamma_current_real = 0.55 * earnings_growth + \
+            0.25 * rent_growth + 0.20 * transaction_trend
+        gamma_long_run_nominal = long_run_nominal_lookup.get(
+            region, gamma_current_real)
         gamma_annual = _clip(
             0.40 * gamma_current_real + 0.60 * gamma_long_run_nominal,
             guardrails.gamma_min_annual,
@@ -377,7 +406,8 @@ def _estimate_growth_coefficients(panel: pd.DataFrame) -> tuple[pd.DataFrame, pd
         dw_stat = float(sm.stats.stattools.durbin_watson(fit.resid))
 
         try:
-            _bg_lm, _bg_pval, _bg_f, _bg_fpval = acorr_breusch_godfrey(fit, nlags=3)
+            _bg_lm, _bg_pval, _bg_f, _bg_fpval = acorr_breusch_godfrey(
+                fit, nlags=3)
             bg_stat = float(_bg_lm)
             bg_pvalue = float(_bg_pval)
         except Exception:
@@ -385,7 +415,8 @@ def _estimate_growth_coefficients(panel: pd.DataFrame) -> tuple[pd.DataFrame, pd
             bg_pvalue = np.nan
 
         try:
-            _bp_lm, _bp_pval, _bp_f, _bp_fpval = het_breuschpagan(fit.resid, fit.model.exog)
+            _bp_lm, _bp_pval, _bp_f, _bp_fpval = het_breuschpagan(
+                fit.resid, fit.model.exog)
             bp_stat = float(_bp_lm)
             bp_pvalue = float(_bp_pval)
         except Exception:
@@ -395,12 +426,14 @@ def _estimate_growth_coefficients(panel: pd.DataFrame) -> tuple[pd.DataFrame, pd
         # ACF plot saved as PNG (non-interactive — Agg backend)
         try:
             fig, ax = plt.subplots(figsize=(8, 3))
-            tsaplots.plot_acf(fit.resid, lags=24, ax=ax, title=f"{region} — residual ACF (lags 1-24)")
+            tsaplots.plot_acf(fit.resid, lags=24, ax=ax,
+                              title=f"{region} — residual ACF (lags 1-24)")
             ax.set_xlabel("Lag (months)")
             ax.set_ylabel("ACF")
             fig.tight_layout()
             safe_name = region.lower().replace(" ", "_").replace(",", "")
-            fig.savefig(RESIDUAL_ACF_DIR / f"{safe_name}_residual_acf.png", dpi=120)
+            fig.savefig(RESIDUAL_ACF_DIR /
+                        f"{safe_name}_residual_acf.png", dpi=120)
             plt.close(fig)
         except Exception:
             plt.close("all")
@@ -502,7 +535,8 @@ def _estimate_growth_coefficients(panel: pd.DataFrame) -> tuple[pd.DataFrame, pd
     print(f"  SUPPLY CHANNEL ({SUPPLY_FEATURE})  —  beta_supply distribution")
     print(f"  supply_available={supply_available}  |  pooled estimate: "
           f"{pooled_lookup.get(SUPPLY_FEATURE, float('nan')):.6f}")
-    print(f"  {'Region':<30}  {'Raw (shrunk)':>14}  {'After guardrail':>15}  {'Clipped?':>8}")
+    print(
+        f"  {'Region':<30}  {'Raw (shrunk)':>14}  {'After guardrail':>15}  {'Clipped?':>8}")
     print(f"  {'─'*30}  {'─'*14}  {'─'*15}  {'─'*8}")
     for reg, raw, final in sorted(supply_raw_vals):
         clipped = "YES" if np.isfinite(raw) and raw > 0.0 else ""
@@ -514,12 +548,14 @@ def _estimate_growth_coefficients(panel: pd.DataFrame) -> tuple[pd.DataFrame, pd
     if len(raw_arr):
         print(f"  {'─'*70}")
         print(f"  raw  — min: {raw_arr.min():+.6f}  median: {np.median(raw_arr):+.6f}  max: {raw_arr.max():+.6f}  n_clipped: {int((raw_arr > 0).sum())}/{len(raw_arr)}")
-        print(f"  final— min: {fin_arr.min():+.6f}  median: {np.median(fin_arr):+.6f}  max: {fin_arr.max():+.6f}")
+        print(
+            f"  final— min: {fin_arr.min():+.6f}  median: {np.median(fin_arr):+.6f}  max: {fin_arr.max():+.6f}")
     print(f"{'─'*70}\n")
 
     # Print beta_affordability distribution (no guardrail — data-driven).
     print(f"\n{'─'*70}")
-    print(f"  AFFORDABILITY CHANNEL ({AFFORDABILITY_FEATURE})  —  beta_affordability distribution")
+    print(
+        f"  AFFORDABILITY CHANNEL ({AFFORDABILITY_FEATURE})  —  beta_affordability distribution")
     print(f"  affordability_available={affordability_available}  |  pooled estimate: "
           f"{pooled_lookup.get(AFFORDABILITY_FEATURE, float('nan')):.6f}")
     print(f"  {'Region':<30}  {'Estimate (shrunk)':>18}")
@@ -527,7 +563,8 @@ def _estimate_growth_coefficients(panel: pd.DataFrame) -> tuple[pd.DataFrame, pd
     for reg, est in sorted(affordability_raw_vals):
         est_s = f"{est:+.6f}" if np.isfinite(est) else "    n/a"
         print(f"  {reg:<30}  {est_s:>18}")
-    aff_arr = np.array([e for _, e in affordability_raw_vals if np.isfinite(e)])
+    aff_arr = np.array(
+        [e for _, e in affordability_raw_vals if np.isfinite(e)])
     if len(aff_arr):
         print(f"  {'─'*70}")
         print(f"  min: {aff_arr.min():+.6f}  median: {np.median(aff_arr):+.6f}  max: {aff_arr.max():+.6f}"
@@ -545,13 +582,15 @@ def _estimate_kappa_by_region(fair_panel: pd.DataFrame) -> pd.DataFrame:
         grp = group.sort_values("date").copy()
         grp["gap_lag1"] = grp["fair_value_gap_log"].shift(1)
         sample = grp.dropna(subset=["fair_value_gap_log", "gap_lag1"])
-        fit = sm.OLS(sample["fair_value_gap_log"], sm.add_constant(sample[["gap_lag1"]], has_constant="add")).fit()
+        fit = sm.OLS(sample["fair_value_gap_log"], sm.add_constant(
+            sample[["gap_lag1"]], has_constant="add")).fit()
         raw_phi = float(fit.params["gap_lag1"])
         if 0.0 < raw_phi < config.fair_value.kappa_phi_upper_bound:
             stable_phis.append(raw_phi)
         rows.append({"region": region, "raw_phi": raw_phi})
 
-    fallback_phi = float(np.median(stable_phis)) if stable_phis else config.fair_value.kappa_fallback_phi
+    fallback_phi = float(np.median(
+        stable_phis)) if stable_phis else config.fair_value.kappa_fallback_phi
     result_rows = []
     for row in rows:
         raw_phi = row["raw_phi"]
@@ -591,8 +630,10 @@ def _fit_baseline_return_model(fair_panel: pd.DataFrame) -> tuple[pd.DataFrame, 
                 }
             )
     sample = pd.DataFrame(rows).dropna().reset_index(drop=True)
-    region_dummies = pd.get_dummies(sample["region"], prefix="region", drop_first=True, dtype=float)
-    regressors = ["fair_value_gap_log", RATE_FEATURE, STRESS_FEATURE, "transaction_growth", EARNINGS_FEATURE]
+    region_dummies = pd.get_dummies(
+        sample["region"], prefix="region", drop_first=True, dtype=float)
+    regressors = ["fair_value_gap_log", RATE_FEATURE,
+                  STRESS_FEATURE, "transaction_growth", EARNINGS_FEATURE]
     X = pd.concat([sample[regressors], region_dummies], axis=1)
     X = sm.add_constant(X, has_constant="add")
     fit = sm.OLS(sample["forward_5y_log_return"], X).fit(cov_type="HC3")
@@ -612,8 +653,10 @@ def _predict_baseline_return(
     fit: sm.regression.linear_model.RegressionResultsWrapper,
     row: pd.Series,
 ) -> float:
-    regressors = ["fair_value_gap_log", RATE_FEATURE, STRESS_FEATURE, "transaction_growth", EARNINGS_FEATURE]
-    features = {feature: float(row.get(feature, 0.0)) for feature in regressors}
+    regressors = ["fair_value_gap_log", RATE_FEATURE,
+                  STRESS_FEATURE, "transaction_growth", EARNINGS_FEATURE]
+    features = {feature: float(row.get(feature, 0.0))
+                for feature in regressors}
     for name in fit.params.index:
         if name.startswith("region_"):
             features[name] = 1.0 if name == f"region_{row['region']}" else 0.0
@@ -629,12 +672,14 @@ def _simulation_plausibility_from_summary(master: pd.DataFrame, summary: pd.Data
         grp = group.sort_values("date").reset_index(drop=True)
         forward_returns = np.asarray(
             [
-                (float(grp.loc[index + 60, "nominal_house_price"]) / float(grp.loc[index, "nominal_house_price"]) - 1.0) * 100.0
+                (float(grp.loc[index + 60, "nominal_house_price"]) /
+                 float(grp.loc[index, "nominal_house_price"]) - 1.0) * 100.0
                 for index in range(len(grp) - 60)
             ],
             dtype=float,
         )
-        baseline = summary[(summary["region"] == region) & (summary["scenario"] == "Baseline")].iloc[0]
+        baseline = summary[(summary["region"] == region) & (
+            summary["scenario"] == "Baseline")].iloc[0]
         hist_loss = float(np.mean(forward_returns <= -10.0))
         rows.append(
             {
@@ -648,13 +693,14 @@ def _simulation_plausibility_from_summary(master: pd.DataFrame, summary: pd.Data
                 "median_minus_hist_p50": float(baseline["median_5yr_growth"] - np.percentile(forward_returns, 50)),
                 "tail_risk_gap": float(baseline["prob_terminal_loss_10pct"] - hist_loss),
                 "within_hist_10_90_band": bool(
-                    np.percentile(forward_returns, 10)
-                    <= float(baseline["median_5yr_growth"])
-                    <= np.percentile(forward_returns, 90)
+                    np.percentile(forward_returns, 10) <=
+                    float(baseline["median_5yr_growth"]) <=
+                    np.percentile(forward_returns, 90)
                 ),
             }
         )
-    plausibility = pd.DataFrame(rows).sort_values("region").reset_index(drop=True)
+    plausibility = pd.DataFrame(rows).sort_values(
+        "region").reset_index(drop=True)
     plausibility.to_csv(SIMULATION_PLAUSIBILITY_REVISED_PATH, index=False)
     plausibility.to_csv(REGION_PLAUSIBILITY_PATH, index=False)
     return plausibility
@@ -743,19 +789,20 @@ def run_stability_diagnostics(
                 lambda s: s.rolling(120, min_periods=60).mean()
             )
             gap = lti - lti_mean
-            indexed[AFFORDABILITY_FEATURE] = gap.groupby(indexed["region"]).shift(1)
+            indexed[AFFORDABILITY_FEATURE] = gap.groupby(
+                indexed["region"]).shift(1)
 
     supply_available = (
-        SUPPLY_FEATURE in indexed.columns
-        and float(indexed[SUPPLY_FEATURE].notna().mean()) >= 0.50
+        SUPPLY_FEATURE in indexed.columns and
+        float(indexed[SUPPLY_FEATURE].notna().mean()) >= 0.50
     )
     affordability_available = (
-        AFFORDABILITY_FEATURE in indexed.columns
-        and float(indexed[AFFORDABILITY_FEATURE].notna().mean()) >= 0.50
+        AFFORDABILITY_FEATURE in indexed.columns and
+        float(indexed[AFFORDABILITY_FEATURE].notna().mean()) >= 0.50
     )
     inactive = (
-        (set() if supply_available else {SUPPLY_FEATURE})
-        | (set() if affordability_available else {AFFORDABILITY_FEATURE})
+        (set() if supply_available else {SUPPLY_FEATURE}) |
+        (set() if affordability_available else {AFFORDABILITY_FEATURE})
     )
     active_features = [f for f in FEATURE_COLUMNS if f not in inactive]
 
@@ -793,12 +840,14 @@ def run_stability_diagnostics(
         try:
             pooled_post = PanelOLS(
                 post_indexed[y_col],
-                sm.add_constant(post_indexed[active_features], has_constant="add"),
+                sm.add_constant(
+                    post_indexed[active_features], has_constant="add"),
                 entity_effects=True,
             ).fit(cov_type="clustered", cluster_entity=True)
 
             for region, grp in post_clean.groupby("region"):
-                grp = grp.sort_values("date").dropna(subset=[y_col] + active_features)
+                grp = grp.sort_values("date").dropna(
+                    subset=[y_col] + active_features)
                 if len(grp) < len(active_features) + 2:
                     continue
                 n_region = len(grp)
@@ -818,7 +867,8 @@ def run_stability_diagnostics(
                     row[feat] = shrunk_post(feat)
                 post2015_params_rows.append(row)
 
-            pd.DataFrame(post2015_params_rows).to_csv(POST2015_PARAMS_PATH, index=False)
+            pd.DataFrame(post2015_params_rows).to_csv(
+                POST2015_PARAMS_PATH, index=False)
         except Exception:
             pass  # post-2015 estimation failed; skip file write
 
@@ -836,16 +886,17 @@ def run_stability_diagnostics(
                 "active_features": "|".join(active_features),
             }
         )
-    pd.DataFrame(diag_rows).to_csv(STRUCTURAL_BREAK_DIAGNOSTICS_PATH, index=False)
+    pd.DataFrame(diag_rows).to_csv(
+        STRUCTURAL_BREAK_DIAGNOSTICS_PATH, index=False)
 
     print(
-        f"\n[Structural Break Diagnostics]\n"
-        + "\n".join(
+        "\n[Structural Break Diagnostics]\n" +
+        "\n".join(
             f"  {r['break_date']}: F={r['f_stat']:.3f}  p={r['p_value']:.4f}  "
             f"{'** SIGNIFICANT **' if r['significant_5pct'] else 'not significant'}"
             for r in chow_rows
-        )
-        + f"\n  any_significant={any_significant}  post2015_preferred={post2015_preferred}"
+        ) +
+        f"\n  any_significant={any_significant}  post2015_preferred={post2015_preferred}"
     )
     return {"any_significant": any_significant, "post2015_preferred": post2015_preferred}
 
@@ -882,7 +933,8 @@ def _calibrate_sigma_by_region(
     MIN_CONDITIONAL_MONTHS = 24
 
     rng = np.random.default_rng(42)
-    eps = rng.standard_normal((N_PATHS, N_MONTHS))  # shape (1000, 60) — fixed across regions/sigmas
+    # shape (1000, 60) — fixed across regions/sigmas
+    eps = rng.standard_normal((N_PATHS, N_MONTHS))
 
     sigma_ms = SIGMA_GRID / np.sqrt(12.0)  # annualised → monthly, shape (37,)
 
@@ -908,7 +960,8 @@ def _calibrate_sigma_by_region(
         )
 
         # Require fair_value_gap_log for conditional filtering
-        has_gap = "fair_value_gap_log" in grp.columns and grp["fair_value_gap_log"].notna().any()
+        has_gap = "fair_value_gap_log" in grp.columns and grp["fair_value_gap_log"].notna(
+        ).any()
 
         if len(grp) < N_MONTHS + 1:
             rows.append({
@@ -921,7 +974,8 @@ def _calibrate_sigma_by_region(
             continue
 
         prices = grp["nominal_house_price"].values
-        gaps = grp["fair_value_gap_log"].values if has_gap else np.full(len(grp), np.nan)
+        gaps = grp["fair_value_gap_log"].values if has_gap else np.full(
+            len(grp), np.nan)
 
         # --- Select conditional or unconditional starting indices ---
         max_start = len(grp) - N_MONTHS
@@ -950,14 +1004,16 @@ def _calibrate_sigma_by_region(
         log_gap = np.full((len(SIGMA_GRID), N_PATHS), gap_sim_start)
         for t in range(N_MONTHS):
             log_gap = (
-                log_gap * a
-                + gamma_m
-                + sigma_ms[:, np.newaxis] * eps[np.newaxis, :, t]
+                log_gap * a +
+                gamma_m +
+                sigma_ms[:, np.newaxis] * eps[np.newaxis, :, t]
             )
         # 60-month log return = final gap − initial gap (since log P* cancels)
-        log_returns_pct = (log_gap - gap_sim_start) * 100.0  # shape (n_sigma, N_PATHS)
+        log_returns_pct = (log_gap - gap_sim_start) * \
+            100.0  # shape (n_sigma, N_PATHS)
 
-        sim_p25s = np.percentile(log_returns_pct, 25, axis=1)  # shape (n_sigma,)
+        sim_p25s = np.percentile(
+            log_returns_pct, 25, axis=1)  # shape (n_sigma,)
         sim_p75s = np.percentile(log_returns_pct, 75, axis=1)
 
         losses = np.abs(sim_p25s - emp_p25) + np.abs(sim_p75s - emp_p75)
@@ -1009,11 +1065,12 @@ def estimate_pti_ptr_blend(panel_df, min_w=0.25, max_w=0.75):
     import warnings
     import numpy as np
 
-    price_col  = next((c for c in ["log_real_price"] if c in panel_df.columns), None)
+    price_col = next(
+        (c for c in ["log_real_price"] if c in panel_df.columns), None)
     income_col = next((c for c in ["log_income_asof", "log_real_earnings",
                                    "real_annual_earnings"] if c in panel_df.columns), None)
-    rent_col   = next((c for c in ["log_real_monthly_rent", "real_monthly_rent",
-                                   "log_rent"] if c in panel_df.columns), None)
+    rent_col = next((c for c in ["log_real_monthly_rent", "real_monthly_rent",
+                                 "log_rent"] if c in panel_df.columns), None)
 
     if not all([price_col, income_col, rent_col]):
         warnings.warn(
@@ -1024,20 +1081,25 @@ def estimate_pti_ptr_blend(panel_df, min_w=0.25, max_w=0.75):
 
     df = panel_df[[price_col, income_col, rent_col]].dropna()
     if len(df) < 100:
-        warnings.warn("estimate_pti_ptr_blend: <100 rows. Using expert prior w=0.60.", UserWarning)
+        warnings.warn(
+            "estimate_pti_ptr_blend: <100 rows. Using expert prior w=0.60.", UserWarning)
         return 0.60
 
     lp = df[price_col].values.copy()
-    li = np.log(df[income_col].values) if df[income_col].min() > 0 else df[income_col].values.copy()
-    lr = np.log(df[rent_col].values)   if df[rent_col].min()   > 0 else df[rent_col].values.copy()
+    li = np.log(df[income_col].values) if df[income_col].min(
+    ) > 0 else df[income_col].values.copy()
+    lr = np.log(df[rent_col].values) if df[rent_col].min(
+    ) > 0 else df[rent_col].values.copy()
 
     # de-mean so scale does not dominate
-    lp -= lp.mean(); li -= li.mean(); lr -= lr.mean()
+    lp -= lp.mean()
+    li -= li.mean()
+    lr -= lr.mean()
 
     best_w, best_sse = 0.60, np.inf
     for w in np.arange(min_w, max_w + 0.01, 0.05):
-        lf   = w * li + (1.0 - w) * lr
-        sse  = float(((lp - lf) ** 2).sum())
+        lf = w * li + (1.0 - w) * lr
+        sse = float(((lp - lf) ** 2).sum())
         if sse < best_sse:
             best_sse, best_w = sse, float(w)
 
@@ -1066,7 +1128,8 @@ def estimate_fair_value_blend_weights(
     config = load_config()
     anchor_months = config.fair_value.anchor_months
     sample = panel_df[panel_df["date"].dt.month.isin(anchor_months)].copy()
-    sample = sample.dropna(subset=["log_real_price", "log_income_asof", "log_rent"]).reset_index(drop=True)
+    sample = sample.dropna(
+        subset=["log_real_price", "log_income_asof", "log_rent"]).reset_index(drop=True)
 
     if len(sample) < 30:
         _warnings.warn(
@@ -1077,15 +1140,18 @@ def estimate_fair_value_blend_weights(
         )
         return 0.60
 
-    region_dummies = pd.get_dummies(sample["region"], prefix="region", drop_first=True, dtype=float)
+    region_dummies = pd.get_dummies(
+        sample["region"], prefix="region", drop_first=True, dtype=float)
 
     # PTI-only model (income-based fair value)
-    X_pti = sm.add_constant(pd.concat([sample[["log_income_asof"]], region_dummies], axis=1), has_constant="add")
+    X_pti = sm.add_constant(pd.concat(
+        [sample[["log_income_asof"]], region_dummies], axis=1), has_constant="add")
     fit_pti = sm.OLS(sample["log_real_price"], X_pti).fit()
     pti_log_fv = fit_pti.predict(X_pti).values
 
     # PTR-only model (rent-based fair value)
-    X_ptr = sm.add_constant(pd.concat([sample[["log_rent"]], region_dummies], axis=1), has_constant="add")
+    X_ptr = sm.add_constant(
+        pd.concat([sample[["log_rent"]], region_dummies], axis=1), has_constant="add")
     fit_ptr = sm.OLS(sample["log_real_price"], X_ptr).fit()
     ptr_log_fv = fit_ptr.predict(X_ptr).values
 
@@ -1132,46 +1198,43 @@ def run_subsample_ols_validation(
 
     split_ts = pd.Timestamp(split_date)
     train = master[master["date"] < split_ts].copy()
-    holdout = master[master["date"] >= split_ts].copy()
-
-    # --- Refit fair-value on train ---
-    fair_train = fit_structural_fair_value(
-        train,
-        regressors=config.fair_value.regressors,
-        anchor_months=config.fair_value.anchor_months,
-    )
-
-    # Apply train coefficients to full panel to get gap for holdout
-    train_fit_obj = fair_train  # FairValueModelResult
-    train_fp = train_fit_obj.fitted_panel.copy()
-    cpi_base = float(train_fp.loc[train_fp["date"] == pd.Timestamp("2015-01-01"), "cpi"].iloc[0]) if (train_fp["date"] == pd.Timestamp("2015-01-01")).any() else float(train_fp["cpi"].iloc[0])
-
     # Re-apply train OLS coefficients to holdout (using the coefficients table)
     # Build region dummies for holdout consistent with train
-    anchor_train = train[train["date"].dt.month.isin(config.fair_value.anchor_months)].dropna(subset=["log_real_price", *config.fair_value.regressors])
-    region_dummies_train = pd.get_dummies(anchor_train["region"], prefix="region", drop_first=True, dtype=float)
-    full_dummies = pd.get_dummies(master["region"], prefix="region", drop_first=True, dtype=float)
+    anchor_train = train[train["date"].dt.month.isin(config.fair_value.anchor_months)].dropna(
+        subset=["log_real_price", *config.fair_value.regressors])
+    region_dummies_train = pd.get_dummies(
+        anchor_train["region"], prefix="region", drop_first=True, dtype=float)
+    full_dummies = pd.get_dummies(
+        master["region"], prefix="region", drop_first=True, dtype=float)
     for col in region_dummies_train.columns:
         if col not in full_dummies.columns:
             full_dummies[col] = 0.0
-    full_dummies = full_dummies.reindex(columns=region_dummies_train.columns, fill_value=0.0)
+    full_dummies = full_dummies.reindex(
+        columns=region_dummies_train.columns, fill_value=0.0)
 
-    X_full = sm.add_constant(pd.concat([master[config.fair_value.regressors].astype(float), full_dummies], axis=1), has_constant="add")
-    X_train_anchor = sm.add_constant(pd.concat([anchor_train[config.fair_value.regressors].astype(float), region_dummies_train], axis=1), has_constant="add")
-    fit_train_ols = sm.OLS(anchor_train["log_real_price"], X_train_anchor).fit(cov_type="HC3")
+    X_full = sm.add_constant(pd.concat([master[config.fair_value.regressors].astype(
+        float), full_dummies], axis=1), has_constant="add")
+    X_train_anchor = sm.add_constant(pd.concat([anchor_train[config.fair_value.regressors].astype(
+        float), region_dummies_train], axis=1), has_constant="add")
+    fit_train_ols = sm.OLS(
+        anchor_train["log_real_price"], X_train_anchor).fit(cov_type="HC3")
 
     master_with_gap = master.copy()
     master_with_gap["fair_value_log_real"] = fit_train_ols.predict(X_full)
-    master_with_gap["fair_value_gap_log"] = master_with_gap["log_real_price"] - master_with_gap["fair_value_log_real"]
+    master_with_gap["fair_value_gap_log"] = master_with_gap["log_real_price"] - \
+        master_with_gap["fair_value_log_real"]
 
-    holdout_with_gap = master_with_gap[master_with_gap["date"] >= split_ts].copy()
+    holdout_with_gap = master_with_gap[master_with_gap["date"] >= split_ts].copy(
+    )
     train_with_gap = master_with_gap[master_with_gap["date"] < split_ts].copy()
 
     # --- Refit growth OLS on train ---
     train_indexed = train_with_gap.set_index(["region", "date"]).sort_index()
-    active_features = [f for f in FEATURE_COLUMNS if f in train_indexed.columns and float(train_indexed[f].notna().mean()) >= 0.50]
+    active_features = [f for f in FEATURE_COLUMNS if f in train_indexed.columns and float(
+        train_indexed[f].notna().mean()) >= 0.50]
     growth_features = ["fair_value_gap_log"] + active_features + MONTH_COLUMNS
-    clean_train = train_indexed.dropna(subset=["price_growth"] + growth_features)
+    clean_train = train_indexed.dropna(
+        subset=["price_growth"] + growth_features)
 
     if len(clean_train) < 50:
         result: dict = {
@@ -1186,7 +1249,8 @@ def run_subsample_ols_validation(
             "error": "Insufficient train observations",
         }
         ensure_directory(VALIDATION_DIR)
-        (VALIDATION_DIR / "subsample_ols_validation.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+        (VALIDATION_DIR / "subsample_ols_validation.json").write_text(
+            json.dumps(result, indent=2), encoding="utf-8")
         return result
 
     growth_model = _PanelOLS(
@@ -1196,8 +1260,10 @@ def run_subsample_ols_validation(
     ).fit(cov_type="clustered", cluster_entity=True)
 
     # --- Predict on holdout ---
-    holdout_indexed = holdout_with_gap.set_index(["region", "date"]).sort_index()
-    clean_holdout = holdout_indexed.dropna(subset=["price_growth"] + growth_features)
+    holdout_indexed = holdout_with_gap.set_index(
+        ["region", "date"]).sort_index()
+    clean_holdout = holdout_indexed.dropna(
+        subset=["price_growth"] + growth_features)
 
     if len(clean_holdout) < 10:
         result = {
@@ -1212,10 +1278,12 @@ def run_subsample_ols_validation(
             "error": "Insufficient holdout observations",
         }
         ensure_directory(VALIDATION_DIR)
-        (VALIDATION_DIR / "subsample_ols_validation.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+        (VALIDATION_DIR / "subsample_ols_validation.json").write_text(
+            json.dumps(result, indent=2), encoding="utf-8")
         return result
 
-    X_holdout = sm.add_constant(clean_holdout[growth_features], has_constant="add")
+    X_holdout = sm.add_constant(
+        clean_holdout[growth_features], has_constant="add")
     # linearmodels PanelOLS params are a Series; use .values for dotting
     coef_names = growth_model.params.index.tolist()
     X_holdout_aligned = X_holdout.reindex(columns=coef_names, fill_value=0.0)
@@ -1233,8 +1301,8 @@ def run_subsample_ols_validation(
         correct = 0
         total = 0
         for i in range(n - horizon + 1):
-            cum_actual = float(np.sum(actual_arr[i : i + horizon]))
-            cum_pred = float(np.sum(pred_arr[i : i + horizon]))
+            cum_actual = float(np.sum(actual_arr[i: i + horizon]))
+            cum_pred = float(np.sum(pred_arr[i: i + horizon]))
             if cum_actual == 0 or cum_pred == 0:
                 continue
             correct += int(np.sign(cum_actual) == np.sign(cum_pred))
@@ -1258,7 +1326,8 @@ def run_subsample_ols_validation(
         "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     ensure_directory(VALIDATION_DIR)
-    (VALIDATION_DIR / "subsample_ols_validation.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+    (VALIDATION_DIR / "subsample_ols_validation.json").write_text(
+        json.dumps(result, indent=2), encoding="utf-8")
     return result
 
 
@@ -1306,7 +1375,8 @@ def _apply_iqr_prior(
         X = np.zeros(n_sim)
         for t in range(horizon_months):
             X = X * (1.0 - kappa_m) + sigma_m * eps[:, t]
-        sim_iqr = float(np.percentile(X * 100.0, 75) - np.percentile(X * 100.0, 25))
+        sim_iqr = float(np.percentile(X * 100.0, 75) -
+                        np.percentile(X * 100.0, 25))
 
         if sim_iqr / hist_iqr >= target_iqr_ratio:
             break
@@ -1344,7 +1414,7 @@ def build_stage4_parameters() -> pd.DataFrame:
 
     # --- Estimate PTI/PTR blend weight (grid-search pooled SSE) ---
     _pti_w = estimate_pti_ptr_blend(master)
-    _ptr_w = 1.0 - _pti_w
+    1.0 - _pti_w
 
     # --- Estimate PTI/PTR blend weight (governance logging) ---
     _pti_weight_estimated: float | None = None
@@ -1354,7 +1424,8 @@ def build_stage4_parameters() -> pd.DataFrame:
         if 0.30 <= _estimated_w <= 0.70:
             _pti_weight_estimated = round(_estimated_w, 4)
             _pti_weight_method = "data_driven"
-            print(f"[build_stage4_parameters] PTI blend weight estimated from data: {_pti_weight_estimated:.4f}")
+            print(
+                f"[build_stage4_parameters] PTI blend weight estimated from data: {_pti_weight_estimated:.4f}")
         else:
             _warnings.warn(
                 f"[build_stage4_parameters] Estimated PTI blend weight {_estimated_w:.4f} "
@@ -1374,13 +1445,16 @@ def build_stage4_parameters() -> pd.DataFrame:
         from src.core.config import DEFAULT_CONFIG_PATH as _CONFIG_PATH
         _params_json = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
         # Update inside the fair_value block; also remove any stale top-level keys
-        _params_json.setdefault("fair_value", {})["fair_value_pti_weight_estimated"] = _pti_weight_estimated
+        _params_json.setdefault("fair_value", {})[
+                                "fair_value_pti_weight_estimated"] = _pti_weight_estimated
         _params_json["fair_value"]["fair_value_pti_weight_method"] = _pti_weight_method
         _params_json.pop("fair_value_pti_weight_estimated", None)
         _params_json.pop("fair_value_pti_weight_method", None)
-        _CONFIG_PATH.write_text(json.dumps(_params_json, indent=2), encoding="utf-8")
+        _CONFIG_PATH.write_text(json.dumps(
+            _params_json, indent=2), encoding="utf-8")
     except Exception as _exc:
-        _warnings.warn(f"[build_stage4_parameters] Could not persist PTI weight to parameters.json: {_exc}", UserWarning, stacklevel=2)
+        _warnings.warn(
+            f"[build_stage4_parameters] Could not persist PTI weight to parameters.json: {_exc}", UserWarning, stacklevel=2)
 
     fair_value = fit_structural_fair_value(
         master,
@@ -1388,8 +1462,10 @@ def build_stage4_parameters() -> pd.DataFrame:
         anchor_months=config.fair_value.anchor_months,
     )
     fair_panel = fair_value.fitted_panel.copy()
-    cpi_base = float(fair_panel.loc[fair_panel["date"] == pd.Timestamp("2015-01-01"), "cpi"].iloc[0])
-    fair_panel["fair_value_nominal"] = fair_panel["fair_value_real"] * (fair_panel["cpi"] / cpi_base)
+    cpi_base = float(
+        fair_panel.loc[fair_panel["date"] == pd.Timestamp("2015-01-01"), "cpi"].iloc[0])
+    fair_panel["fair_value_nominal"] = fair_panel["fair_value_real"] * \
+        (fair_panel["cpi"] / cpi_base)
 
     # ------------------------------------------------------------------
     # 90% prediction-interval bands on fair_value_gap_log
@@ -1403,11 +1479,14 @@ def build_stage4_parameters() -> pd.DataFrame:
     # ------------------------------------------------------------------
     _resid_std = float(fair_value.diagnostics["resid_std"].iloc[0])
     _Z_90 = 1.645
-    fair_panel["fair_value_gap_lower_90"] = fair_panel["fair_value_gap_log"] - _Z_90 * _resid_std
-    fair_panel["fair_value_gap_upper_90"] = fair_panel["fair_value_gap_log"] + _Z_90 * _resid_std
+    fair_panel["fair_value_gap_lower_90"] = fair_panel["fair_value_gap_log"] - \
+        _Z_90 * _resid_std
+    fair_panel["fair_value_gap_upper_90"] = fair_panel["fair_value_gap_log"] + \
+        _Z_90 * _resid_std
 
     _rate_channel_diagnostics(master)
-    coefficient_rows, diagnostics, pooled_coeffs = _estimate_growth_coefficients(fair_panel)
+    coefficient_rows, diagnostics, pooled_coeffs = _estimate_growth_coefficients(
+        fair_panel)
     stability = run_stability_diagnostics(fair_panel, diagnostics)
     kappa_rows = _estimate_kappa_by_region(fair_panel)
 
@@ -1433,10 +1512,12 @@ def build_stage4_parameters() -> pd.DataFrame:
             }
         )
 
-    params = coefficient_rows.merge(pd.DataFrame(valuation_rows), on="region", how="left").merge(kappa_rows, on="region", how="left")
+    params = coefficient_rows.merge(pd.DataFrame(
+        valuation_rows), on="region", how="left").merge(kappa_rows, on="region", how="left")
 
     sigma_cal = _calibrate_sigma_by_region(fair_panel, params, config)
-    params = params.merge(sigma_cal[["region", "sigma_calibrated"]], on="region", how="left")
+    params = params.merge(
+        sigma_cal[["region", "sigma_calibrated"]], on="region", how="left")
     params["sigma_heuristic"] = params["sigma"]
     params["sigma"] = params["sigma_calibrated"].combine_first(params["sigma"])
     params = params.drop(columns=["sigma_calibrated"])
@@ -1448,7 +1529,8 @@ def build_stage4_parameters() -> pd.DataFrame:
     # Load per-region sigma floor overrides once before loop
     try:
         from src.core.config import DEFAULT_CONFIG_PATH as _CFG_PATH_SIGMA
-        _sigma_floor_overrides: dict = json.loads(_CFG_PATH_SIGMA.read_text(encoding="utf-8")).get("sigma_floor_overrides", {})
+        _sigma_floor_overrides: dict = json.loads(_CFG_PATH_SIGMA.read_text(
+            encoding="utf-8")).get("sigma_floor_overrides", {})
     except Exception:
         _sigma_floor_overrides = {}
     for _, pr in params.iterrows():
@@ -1467,7 +1549,8 @@ def build_stage4_parameters() -> pd.DataFrame:
                 np.log(prices[i + 60] / prices[i]) * 100.0
                 for i in range(len(grp) - 60)
             ]
-            hist_iqr = float(np.percentile(hist_returns, 75) - np.percentile(hist_returns, 25))
+            hist_iqr = float(np.percentile(hist_returns, 75) -
+                             np.percentile(hist_returns, 25))
         else:
             hist_iqr = 0.0
 
@@ -1478,7 +1561,8 @@ def build_stage4_parameters() -> pd.DataFrame:
         if region in sigma_floors:
             floor_val = sigma_floors[region]
             if sigma_new < floor_val:
-                print(f"[sigma floor] {region}: sigma {sigma_new:.4f} -> {floor_val:.4f} (floor override)")
+                print(
+                    f"[sigma floor] {region}: sigma {sigma_new:.4f} -> {floor_val:.4f} (floor override)")
                 sigma_new = floor_val
 
         _iqr_prior_rows.append({
@@ -1490,13 +1574,15 @@ def build_stage4_parameters() -> pd.DataFrame:
         })
         _sigma_updates[region] = sigma_new
 
-    params["sigma"] = params["region"].map(_sigma_updates).combine_first(params["sigma"])
+    params["sigma"] = params["region"].map(
+        _sigma_updates).combine_first(params["sigma"])
     _iqr_prior_df = pd.DataFrame(_iqr_prior_rows)
     print("\n--- IQR Prior: sigma before/after ---")
     print(_iqr_prior_df.to_string(index=False))
 
     params["post2015_preferred"] = stability["post2015_preferred"]
-    params["last_updated"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    params["last_updated"] = datetime.now(
+        timezone.utc).isoformat(timespec="seconds")
     params["final_spec_note"] = (
         "Canonical rebuild on the historical research panel. "
         "Fair value is estimated from a semi-structural real-price regression on as-of earnings, rent, and mortgage rates. "
@@ -1506,8 +1592,10 @@ def build_stage4_parameters() -> pd.DataFrame:
     )
     params["rho_source"] = "region_hc3_shrunk"
     params["rate_channel_mode"] = "rate_level_plus_aux_stress"
-    params["earnings_growth_12m_lag1_is_interpolated"] = params["earnings_staleness_months"].gt(0)
-    params["net_additions_monthly_is_interpolated"] = pd.to_datetime(params["last_observation_date"]).dt.month.ne(4)
+    params["earnings_growth_12m_lag1_is_interpolated"] = params["earnings_staleness_months"].gt(
+        0)
+    params["net_additions_monthly_is_interpolated"] = pd.to_datetime(
+        params["last_observation_date"]).dt.month.ne(4)
 
     ensure_directory(STAGE4_OUTPUT_DIR)
     params.to_csv(STAGE4_OUTPUT_PATH, index=False)
@@ -1561,8 +1649,10 @@ def build_stage5_summary(stage4_params: pd.DataFrame) -> pd.DataFrame:
         anchor_months=config.fair_value.anchor_months,
     )
     fair_panel = fair_value.fitted_panel.copy()
-    cpi_base = float(fair_panel.loc[fair_panel["date"] == pd.Timestamp("2015-01-01"), "cpi"].iloc[0])
-    fair_panel["fair_value_nominal"] = fair_panel["fair_value_real"] * (fair_panel["cpi"] / cpi_base)
+    cpi_base = float(
+        fair_panel.loc[fair_panel["date"] == pd.Timestamp("2015-01-01"), "cpi"].iloc[0])
+    fair_panel["fair_value_nominal"] = fair_panel["fair_value_real"] * \
+        (fair_panel["cpi"] / cpi_base)
     _, baseline_fit = _fit_baseline_return_model(fair_panel)
 
     latest = (
@@ -1580,12 +1670,14 @@ def build_stage5_summary(stage4_params: pd.DataFrame) -> pd.DataFrame:
         start_price = float(latest_row["nominal_house_price"])
         current_rate = float(latest_row["mortgage_rate"])
         current_stress = float(latest_row.get("financial_stress_lag3", 0.0))
-        baseline_log_return = _predict_baseline_return(baseline_fit, latest_row)
+        baseline_log_return = _predict_baseline_return(
+            baseline_fit, latest_row)
         base_drift = float(params.loc[region, "gamma_annual_pp"]) / 100.0
         base_sigma = float(params.loc[region, "sigma"])
         kappa = float(params.loc[region, "kappa"])
         beta_rate = float(params.loc[region, "beta_rate"])
-        beta_financial_stress = float(params.loc[region, "beta_financial_stress"])
+        beta_financial_stress = float(
+            params.loc[region, "beta_financial_stress"])
         beta_transaction = float(params.loc[region, "beta_transaction_growth"])
         current_fair_value = float(latest_row["fair_value_nominal"])
 
@@ -1593,21 +1685,25 @@ def build_stage5_summary(stage4_params: pd.DataFrame) -> pd.DataFrame:
             scenario = config.scenarios[scenario_name]
             rate_shift_pp = scenario.rate_shift_bps / 100.0
             annual_overlay = (
-                3.0 * beta_rate * rate_shift_pp
-                + 12.0 * beta_financial_stress * scenario.financial_stress_shift
-                + 12.0 * beta_transaction * scenario.transaction_shift
-                + scenario.drift_shift_pct / 100.0
+                3.0 * beta_rate * rate_shift_pp +
+                12.0 * beta_financial_stress * scenario.financial_stress_shift +
+                12.0 * beta_transaction * scenario.transaction_shift +
+                scenario.drift_shift_pct / 100.0
             )
             target_log_return = baseline_log_return + 5.0 * annual_overlay
             target_terminal_price = start_price * np.exp(target_log_return)
-            target_terminal_price = (1.0 - scenario.valuation_gap_closure) * target_terminal_price + scenario.valuation_gap_closure * current_fair_value
-            target_terminal_price *= 1.0 + scenario.income_growth_shift_pct / 150.0 - scenario.supply_shift_pct / 400.0
-            target_terminal_price = max(start_price * scenario.min_target_price_ratio, target_terminal_price)
+            target_terminal_price = (1.0 - scenario.valuation_gap_closure) * \
+                target_terminal_price + scenario.valuation_gap_closure * current_fair_value
+            target_terminal_price *= 1.0 + scenario.income_growth_shift_pct / \
+                150.0 - scenario.supply_shift_pct / 400.0
+            target_terminal_price = max(
+                start_price * scenario.min_target_price_ratio, target_terminal_price)
 
             mean_path = np.empty(61)
             mean_path[0] = start_price
             for t in range(1, 61):
-                mean_path[t] = mean_path[t - 1] + kappa * (target_terminal_price - mean_path[t - 1]) * (1 / 12)
+                mean_path[t] = mean_path[t - 1] + kappa * \
+                    (target_terminal_price - mean_path[t - 1]) * (1 / 12)
             paths = run_monte_carlo(
                 start_price=start_price,
                 n_months=60,
@@ -1620,7 +1716,8 @@ def build_stage5_summary(stage4_params: pd.DataFrame) -> pd.DataFrame:
                 },
                 seed=config.controls.random_seed,
             )
-            terminal_returns = (paths.iloc[-1].to_numpy() / start_price - 1.0) * 100.0
+            terminal_returns = (
+                paths.iloc[-1].to_numpy() / start_price - 1.0) * 100.0
             rows.append(
                 {
                     "scenario": scenario_name,
@@ -1647,10 +1744,13 @@ def build_stage5_summary(stage4_params: pd.DataFrame) -> pd.DataFrame:
             )
 
     summary = pd.DataFrame(rows)
-    spread = summary.groupby("region", as_index=False)["median_5yr_growth"].agg(["max", "min"]).reset_index()
+    spread = summary.groupby("region", as_index=False)[
+                             "median_5yr_growth"].agg(["max", "min"]).reset_index()
     spread["scenario_spread_pp"] = spread["max"] - spread["min"]
-    summary = summary.drop(columns=["scenario_spread_pp"]).merge(spread[["region", "scenario_spread_pp"]], on="region", how="left")
-    summary = summary.sort_values(["region", "scenario"]).reset_index(drop=True)
+    summary = summary.drop(columns=["scenario_spread_pp"]).merge(
+        spread[["region", "scenario_spread_pp"]], on="region", how="left")
+    summary = summary.sort_values(
+        ["region", "scenario"]).reset_index(drop=True)
 
     ensure_directory(STAGE5_OUTPUT_DIR)
     summary.to_csv(STAGE5_OUTPUT_PATH, index=False)
@@ -1687,12 +1787,16 @@ def build_stage6_handoff(stage4_params: pd.DataFrame, stage5_summary: pd.DataFra
     rows: list[dict] = []
     for _, latest_row in latest.iterrows():
         region = str(latest_row["region"])
-        region_sim = stage5_summary[stage5_summary["region"] == region].set_index("scenario")
+        region_sim = stage5_summary[stage5_summary["region"] == region].set_index(
+            "scenario")
 
-        weighted_consumer_return = sum(consumer_weights[name] * float(region_sim.loc[name, "median_5yr_growth"]) for name in consumer_weights)
-        weighted_reit_return = sum(reit_weights[name] * float(region_sim.loc[name, "median_5yr_growth"]) for name in reit_weights)
+        weighted_consumer_return = sum(consumer_weights[name] * float(
+            region_sim.loc[name, "median_5yr_growth"]) for name in consumer_weights)
+        weighted_reit_return = sum(
+            reit_weights[name] * float(region_sim.loc[name, "median_5yr_growth"]) for name in reit_weights)
         tail_risk = float(region_sim["prob_terminal_loss_10pct"].mean())
-        scenario_spread = float(region_sim["median_5yr_growth"].max() - region_sim["median_5yr_growth"].min())
+        scenario_spread = float(
+            region_sim["median_5yr_growth"].max() - region_sim["median_5yr_growth"].min())
         p_star_now = float(params.loc[region, "mu_equilibrium"])
         p_last = float(latest_row["nominal_house_price"])
         pct_above_pstar = (p_last / p_star_now - 1.0) * 100.0
@@ -1700,19 +1804,22 @@ def build_stage6_handoff(stage4_params: pd.DataFrame, stage5_summary: pd.DataFra
         c1_mispricing = _clip(50.0 - 0.95 * pct_above_pstar, 0.0, 100.0)
         c2_consumer = _clip(50.0 + 1.8 * weighted_consumer_return, 0.0, 100.0)
         c2_reit = _clip(50.0 + 1.8 * weighted_reit_return, 0.0, 100.0)
-        yield_score = _clip(50.0 + (float(latest_row["gross_yield_pct"]) - 5.5) * 16.0, 0.0, 100.0)
+        yield_score = _clip(
+            50.0 + (float(latest_row["gross_yield_pct"]) - 5.5) * 16.0, 0.0, 100.0)
         tail_score = _clip(100.0 * (1.0 - tail_risk), 0.0, 100.0)
         c3_regime = _clip(
-            60.0
-            + 65.0 * float(latest_row.get("transaction_growth", 0.0))
-            - 1.0 * scenario_spread
-            - 5.0 * max(float(latest_row.get("unemployment_rate", 0.0)) - 5.0, 0.0),
+            60.0 +
+            65.0 * float(latest_row.get("transaction_growth", 0.0)) -
+            1.0 * scenario_spread -
+            5.0 * max(float(latest_row.get("unemployment_rate", 0.0)) - 5.0, 0.0),
             0.0,
             100.0,
         )
 
-        consumer_score = _clip(0.40 * c1_mispricing + 0.35 * c2_consumer + 0.25 * tail_score, 0.0, 100.0)
-        reit_score = _clip(0.20 * c1_mispricing + 0.35 * c2_reit + 0.25 * yield_score + 0.20 * tail_score, 0.0, 100.0)
+        consumer_score = _clip(
+            0.40 * c1_mispricing + 0.35 * c2_consumer + 0.25 * tail_score, 0.0, 100.0)
+        reit_score = _clip(0.20 * c1_mispricing + 0.35 * c2_reit +
+                           0.25 * yield_score + 0.20 * tail_score, 0.0, 100.0)
 
         rows.append(
             {
@@ -1766,7 +1873,7 @@ def run_canonical_rebuild() -> CanonicalBuildResult:
     """Run the canonical Stage 4-6 rebuild and write app-ready artifacts."""
     stage4 = build_stage4_parameters()
     stage5 = build_stage5_summary(stage4)
-    stage6 = build_stage6_handoff(stage4, stage5)
+    build_stage6_handoff(stage4, stage5)
 
     # Pull publication-lag audit fields from the panel metadata written by
     # build_canonical_panel (Stage 2/3).  Absent if panel was not rebuilt in
@@ -1774,7 +1881,8 @@ def run_canonical_rebuild() -> CanonicalBuildResult:
     _max_lag: int | None = None
     _effective_as_of: str | None = None
     try:
-        _panel_meta = json.loads(CANONICAL_PANEL_METADATA_PATH.read_text(encoding="utf-8"))
+        _panel_meta = json.loads(
+            CANONICAL_PANEL_METADATA_PATH.read_text(encoding="utf-8"))
         _max_lag = _panel_meta.get("max_publication_lag_months")
         _effective_as_of = _panel_meta.get("effective_data_as_of")
     except Exception:
@@ -1784,13 +1892,15 @@ def run_canonical_rebuild() -> CanonicalBuildResult:
         stage4_path=str(STAGE4_OUTPUT_PATH),
         stage5_path=str(STAGE5_OUTPUT_PATH),
         stage6_path=str(STAGE6_OUTPUT_PATH),
-        generated_at_utc=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        generated_at_utc=datetime.now(
+            timezone.utc).isoformat(timespec="seconds"),
         regions=int(stage4["region"].nunique()),
         scenarios=int(stage5["scenario"].nunique()),
         max_publication_lag_months=_max_lag,
         effective_data_as_of=_effective_as_of,
     )
-    PIPELINE_METADATA_PATH.write_text(json.dumps(asdict(metadata), indent=2), encoding="utf-8")
+    PIPELINE_METADATA_PATH.write_text(json.dumps(
+        asdict(metadata), indent=2), encoding="utf-8")
     return metadata
 
 

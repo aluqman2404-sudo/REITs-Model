@@ -30,13 +30,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PROC = ROOT / "data" / "processed"
 
-INPUT_FILE  = PROC / "master_dataset.csv"
+INPUT_FILE = PROC / "master_dataset.csv"
 OUTPUT_FILE = PROC / "master_dataset_engineered.csv"
-LOG_FILE    = PROC / "feature_engineering_log.txt"
+LOG_FILE = PROC / "feature_engineering_log.txt"
 
 # ── Model window ──────────────────────────────────────────────────────────────
 MODEL_START = pd.Timestamp("2005-01-01")
-MODEL_END   = pd.Timestamp("2025-10-01")
+MODEL_END = pd.Timestamp("2025-10-01")
 
 REGIONS = [
     "East Midlands", "East of England", "London", "North East",
@@ -50,7 +50,7 @@ _LOG: list[str] = []
 
 def _log(msg: str = "") -> None:
     """Append a timestamped line to the log buffer and print it."""
-    ts   = datetime.now().strftime("%H:%M:%S")
+    ts = datetime.now().strftime("%H:%M:%S")
     line = f"[{ts}] {msg}" if msg else ""
     _LOG.append(line)
     print(line)
@@ -62,7 +62,8 @@ def _safe_log(series: pd.Series, label: str) -> pd.Series:
     """Log of a series; warn if any non-positive values are present."""
     n_bad = (series <= 0).sum()
     if n_bad > 0:
-        _log(f"  WARNING: {n_bad} non-positive values in '{label}' — will produce NaN")
+        _log(
+            f"  WARNING: {n_bad} non-positive values in '{label}' — will produce NaN")
     return np.log(series)
 
 
@@ -93,12 +94,18 @@ def transformation1_log_variables(df: pd.DataFrame) -> pd.DataFrame:
     _log("Transformation 1: Log variables")
     _log("=" * 60)
 
-    df["log_real_price"]      = _safe_log(df["real_house_price"],                     "real_house_price")
-    df["log_income"]          = _safe_log(df["real_annual_earnings"],                  "real_annual_earnings")
-    df["log_population"]      = _safe_log(df["population"],                            "population")
-    df["log_rent"]            = _safe_log(df["real_monthly_rent"].clip(lower=1e-6),    "real_monthly_rent")
-    df["log_supply"]          = _safe_log(df["net_additions_monthly"].clip(lower=1),   "net_additions_monthly")
-    df["log_price_to_income"] = _safe_log(df["price_to_income_ratio_derived"],         "price_to_income_ratio_derived")
+    df["log_real_price"] = _safe_log(
+        df["real_house_price"],                     "real_house_price")
+    df["log_income"] = _safe_log(
+        df["real_annual_earnings"],                  "real_annual_earnings")
+    df["log_population"] = _safe_log(
+        df["population"],                            "population")
+    df["log_rent"] = _safe_log(df["real_monthly_rent"].clip(
+        lower=1e-6),    "real_monthly_rent")
+    df["log_supply"] = _safe_log(df["net_additions_monthly"].clip(
+        lower=1),   "net_additions_monthly")
+    df["log_price_to_income"] = _safe_log(
+        df["price_to_income_ratio_derived"],         "price_to_income_ratio_derived")
 
     for col in ["log_real_price", "log_income", "log_population",
                 "log_supply", "log_price_to_income"]:
@@ -129,8 +136,8 @@ def transformation2_price_growth(df: pd.DataFrame) -> pd.DataFrame:
 
     df = df.sort_values(["region", "date"]).reset_index(drop=True)
 
-    df["price_growth"]     = _per_region_diff(df, "log_real_price", 1)
-    df["price_growth_3m"]  = _per_region_diff(df, "log_real_price", 3)  / 3
+    df["price_growth"] = _per_region_diff(df, "log_real_price", 1)
+    df["price_growth_3m"] = _per_region_diff(df, "log_real_price", 3) / 3
     df["price_growth_12m"] = _per_region_diff(df, "log_real_price", 12) / 12
 
     for col in ["price_growth", "price_growth_3m", "price_growth_12m"]:
@@ -171,7 +178,8 @@ def transformation3_lagged_variables(df: pd.DataFrame) -> pd.DataFrame:
     for src, lag, out in lag_spec:
         df[out] = _per_region_shift(df, src, lag)
         n_nan = df[out].isna().sum()
-        _log(f"  {out} (lag={lag}): {df[out].notna().sum()} valid, {n_nan} NaN")
+        _log(
+            f"  {out} (lag={lag}): {df[out].notna().sum()} valid, {n_nan} NaN")
 
     return df
 
@@ -192,10 +200,10 @@ def transformation4_frequency_check(df: pd.DataFrame) -> None:
     _log("=" * 60)
 
     expected_months = len(pd.date_range(MODEL_START, MODEL_END, freq="MS"))
-    expected_rows   = expected_months * len(REGIONS)
+    expected_rows = expected_months * len(REGIONS)
 
     # 1. Duplicates
-    n_dup  = df.duplicated(subset=["date", "region"]).sum()
+    n_dup = df.duplicated(subset=["date", "region"]).sum()
     status = "PASS" if n_dup == 0 else "FAIL"
     _log(f"  Duplicate (date, region) pairs: {n_dup}  [{status}]")
 
@@ -205,18 +213,19 @@ def transformation4_frequency_check(df: pd.DataFrame) -> None:
     _log(f"  Total rows: {n_rows} (expected {expected_rows})  [{status}]")
 
     # 3. Per-region month gaps
-    max_gap_days    = 0
+    max_gap_days = 0
     problem_regions = []
     for region, grp in df.groupby("region"):
         dates = grp["date"].sort_values().reset_index(drop=True)
-        gaps  = dates.diff().dropna().dt.days
+        gaps = dates.diff().dropna().dt.days
         max_g = gaps.max()
         if max_g > 31:   # >31 days → gap larger than one month
             problem_regions.append((region, max_g))
         max_gap_days = max(max_gap_days, max_g)
 
     if not problem_regions:
-        _log(f"  Max date gap across all regions: {max_gap_days:.0f} days  [PASS]")
+        _log(
+            f"  Max date gap across all regions: {max_gap_days:.0f} days  [PASS]")
     else:
         _log("  Date gaps > 1 month detected:  [FAIL]")
         for r, g in problem_regions:
@@ -224,10 +233,11 @@ def transformation4_frequency_check(df: pd.DataFrame) -> None:
 
     # 4. Date range
     actual_start = df["date"].min()
-    actual_end   = df["date"].max()
-    ok     = (actual_start == MODEL_START) and (actual_end == MODEL_END)
+    actual_end = df["date"].max()
+    ok = (actual_start == MODEL_START) and (actual_end == MODEL_END)
     status = "PASS" if ok else "FAIL"
-    _log(f"  Date range: {actual_start:%Y-%m-%d} → {actual_end:%Y-%m-%d}  [{status}]")
+    _log(
+        f"  Date range: {actual_start:%Y-%m-%d} → {actual_end:%Y-%m-%d}  [{status}]")
 
 
 # ── Correlation summary ───────────────────────────────────────────────────────
@@ -245,10 +255,10 @@ def log_lag_correlation_table(df: pd.DataFrame) -> None:
         "earnings_lag12",
     ]
     target = df["price_growth"].dropna()
-    rows   = []
+    rows = []
     for col in lag_cols:
         aligned = df.loc[target.index, col].dropna()
-        idx     = target.index.intersection(aligned.index)
+        idx = target.index.intersection(aligned.index)
         if len(idx) > 50:
             r = target.loc[idx].corr(aligned.loc[idx])
             rows.append((col, f"{r:+.4f}", len(idx)))
@@ -308,13 +318,14 @@ def run_feature_engineering() -> pd.DataFrame:
         "net_additions_monthly", "real_annual_earnings", "gross_yield_pct",
         "rental_index", "real_monthly_rent", "population", "cpi",
     ]]
-    _log(f"  New engineered columns ({len(engineered_cols)}): {engineered_cols}")
+    _log(
+        f"  New engineered columns ({len(engineered_cols)}): {engineered_cols}")
 
     _log("")
     _log("  Missing values in engineered columns:")
     any_missing = False
     for col in engineered_cols:
-        n   = df[col].isna().sum()
+        n = df[col].isna().sum()
         pct = 100 * n / len(df)
         if n > 0:
             _log(f"    {col}: {n} ({pct:.1f}%)")
@@ -325,7 +336,8 @@ def run_feature_engineering() -> pd.DataFrame:
     # Save dataset
     PROC.mkdir(parents=True, exist_ok=True)
     df.to_csv(OUTPUT_FILE, index=False)
-    _log(f"\n  Saved {len(df):,} rows × {len(df.columns)} columns → {OUTPUT_FILE.name}")
+    _log(
+        f"\n  Saved {len(df):,} rows × {len(df.columns)} columns → {OUTPUT_FILE.name}")
 
     # Save log
     LOG_FILE.write_text("\n".join(_LOG), encoding="utf-8")

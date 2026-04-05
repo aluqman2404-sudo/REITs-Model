@@ -14,12 +14,9 @@ from src.core.paths import OUTPUT_DATA_DIR, ensure_directory
 from src.model.canonical_rebuild import (
     FEATURE_COLUMNS,
     MONTH_COLUMNS,
-    RATE_DIAGNOSTICS_PATH,
     RATE_FEATURE,
     SIMULATION_PLAUSIBILITY_REVISED_PATH,
-    STAGE5_OUTPUT_PATH,
     load_model_panel,
-    _load_master_dataset,
 )
 
 
@@ -77,7 +74,8 @@ def _expanding_forecast_records(horizon_months: int = 1) -> pd.DataFrame:
             if row[[f"target_h{horizon_months}", *regressors]].isna().any():
                 continue
 
-            train = grp.iloc[:index].dropna(subset=[f"target_h{horizon_months}", *regressors])
+            train = grp.iloc[:index].dropna(
+                subset=[f"target_h{horizon_months}", *regressors])
             if len(train) < 60:
                 continue
 
@@ -85,9 +83,11 @@ def _expanding_forecast_records(horizon_months: int = 1) -> pd.DataFrame:
                 train[f"target_h{horizon_months}"],
                 sm.add_constant(train[regressors], has_constant="add"),
             ).fit()
-            features = sm.add_constant(row[regressors].to_frame().T, has_constant="add")
+            features = sm.add_constant(
+                row[regressors].to_frame().T, has_constant="add")
             actual = float(row[f"target_h{horizon_months}"])
-            mean12 = float(grp.iloc[max(0, index - 12) : index]["price_growth"].mean() * horizon_months)
+            mean12 = float(grp.iloc[max(0, index - 12): index]
+                           ["price_growth"].mean() * horizon_months)
             ar1 = float(grp.iloc[index - 1]["price_growth"] * horizon_months)
 
             rows.append(
@@ -108,7 +108,8 @@ def _expanding_forecast_records(horizon_months: int = 1) -> pd.DataFrame:
 
 def forecast_benchmark() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Benchmark rolling-origin forecasts against transparent baselines."""
-    rolling_frames = [_expanding_forecast_records(horizon_months=horizon) for horizon in (1, 3)]
+    rolling_frames = [_expanding_forecast_records(
+        horizon_months=horizon) for horizon in (1, 3)]
     forecast_df = pd.concat(rolling_frames, ignore_index=True)
 
     overall_rows = []
@@ -118,7 +119,8 @@ def forecast_benchmark() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.D
     directional_rows = []
 
     for horizon in sorted(forecast_df["horizon_months"].unique()):
-        horizon_df = forecast_df[forecast_df["horizon_months"] == horizon].copy()
+        horizon_df = forecast_df[forecast_df["horizon_months"] ==
+                                 horizon].copy()
         for benchmark in _benchmarks():
             error = horizon_df[benchmark] - horizon_df["actual"]
             rolling_rows.append(
@@ -173,11 +175,16 @@ def forecast_benchmark() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.D
                         }
                     )
 
-    overall = pd.DataFrame(overall_rows).sort_values("rmse").reset_index(drop=True)
-    by_region = pd.DataFrame(by_region_rows).sort_values(["region", "rmse"]).reset_index(drop=True)
-    rolling = pd.DataFrame(rolling_rows).sort_values(["horizon_months", "rmse"]).reset_index(drop=True)
-    bias = pd.DataFrame(bias_rows).sort_values(["horizon_months", "benchmark", "region"]).reset_index(drop=True)
-    directional = pd.DataFrame(directional_rows).sort_values(["horizon_months", "benchmark", "region"]).reset_index(drop=True)
+    overall = pd.DataFrame(overall_rows).sort_values(
+        "rmse").reset_index(drop=True)
+    by_region = pd.DataFrame(by_region_rows).sort_values(
+        ["region", "rmse"]).reset_index(drop=True)
+    rolling = pd.DataFrame(rolling_rows).sort_values(
+        ["horizon_months", "rmse"]).reset_index(drop=True)
+    bias = pd.DataFrame(bias_rows).sort_values(
+        ["horizon_months", "benchmark", "region"]).reset_index(drop=True)
+    directional = pd.DataFrame(directional_rows).sort_values(
+        ["horizon_months", "benchmark", "region"]).reset_index(drop=True)
 
     overall.to_csv(FORECAST_OVERALL_PATH, index=False)
     by_region.to_csv(FORECAST_REGION_PATH, index=False)
@@ -204,12 +211,14 @@ def coefficient_stability() -> pd.DataFrame:
         else:
             dates = panel.index.get_level_values("date")
             subset = panel[(dates >= bounds[0]) & (dates <= bounds[1])]
-        clean = subset.dropna(subset=["price_growth", *FEATURE_COLUMNS, *MONTH_COLUMNS])
+        clean = subset.dropna(
+            subset=["price_growth", *FEATURE_COLUMNS, *MONTH_COLUMNS])
         identified[period_name] = {}
         try:
             fit = PanelOLS(
                 clean["price_growth"],
-                sm.add_constant(clean[FEATURE_COLUMNS + MONTH_COLUMNS], has_constant="add"),
+                sm.add_constant(
+                    clean[FEATURE_COLUMNS + MONTH_COLUMNS], has_constant="add"),
                 entity_effects=True,
                 drop_absorbed=True,
             ).fit(cov_type="clustered", cluster_entity=True)
@@ -219,23 +228,28 @@ def coefficient_stability() -> pd.DataFrame:
         except Exception:
             fit = PanelOLS(
                 clean["price_growth"],
-                sm.add_constant(clean[FEATURE_COLUMNS + MONTH_COLUMNS], has_constant="add"),
+                sm.add_constant(
+                    clean[FEATURE_COLUMNS + MONTH_COLUMNS], has_constant="add"),
                 entity_effects=True,
                 check_rank=False,
                 drop_absorbed=True,
             ).fit(cov_type="clustered", cluster_entity=True)
             estimates[period_name] = fit.params
             for feature in FEATURE_COLUMNS:
-                identified[period_name][feature] = bool((clean[feature] != 0).any())
+                identified[period_name][feature] = bool(
+                    (clean[feature] != 0).any())
 
     rows = []
     for feature in FEATURE_COLUMNS:
         full_coef = float(estimates["full"].get(feature, np.nan))
         early_coef = float(estimates["early"].get(feature, np.nan))
         late_coef = float(estimates["late"].get(feature, np.nan))
-        sign_full = np.sign(full_coef) if np.isfinite(full_coef) and identified["full"].get(feature, False) else np.nan
-        sign_early = np.sign(early_coef) if np.isfinite(early_coef) and identified["early"].get(feature, False) else np.nan
-        sign_late = np.sign(late_coef) if np.isfinite(late_coef) and identified["late"].get(feature, False) else np.nan
+        sign_full = np.sign(full_coef) if np.isfinite(
+            full_coef) and identified["full"].get(feature, False) else np.nan
+        sign_early = np.sign(early_coef) if np.isfinite(
+            early_coef) and identified["early"].get(feature, False) else np.nan
+        sign_late = np.sign(late_coef) if np.isfinite(
+            late_coef) and identified["late"].get(feature, False) else np.nan
         rows.append(
             {
                 "feature": feature,
@@ -258,7 +272,8 @@ def coefficient_stability() -> pd.DataFrame:
             }
         )
 
-    stability = pd.DataFrame(rows).sort_values("feature").reset_index(drop=True)
+    stability = pd.DataFrame(rows).sort_values(
+        "feature").reset_index(drop=True)
     stability.to_csv(STABILITY_PATH, index=False)
     return stability
 
@@ -281,9 +296,9 @@ def regional_rate_stability() -> pd.DataFrame:
     Writes to REGIONAL_STABILITY_PATH and returns the DataFrame.
     """
     EARLY_START, EARLY_END = "2005-01-01", "2015-01-01"   # exclusive end
-    LATE_START              = "2015-01-01"
-    RATIO_FLAG_THRESHOLD    = 5.0
-    HAC_MAXLAGS             = 24
+    LATE_START = "2015-01-01"
+    RATIO_FLAG_THRESHOLD = 5.0
+    HAC_MAXLAGS = 24
     NEEDED = ["price_growth", RATE_FEATURE] + list(MONTH_COLUMNS)
 
     panel = _load_panel()
@@ -298,7 +313,8 @@ def regional_rate_stability() -> pd.DataFrame:
         if len(df) < 20:
             return np.nan, np.nan, np.nan, 0
         y = df["price_growth"].values
-        X = sm.add_constant(df[[RATE_FEATURE] + list(MONTH_COLUMNS)].values, has_constant="raise")
+        X = sm.add_constant(
+            df[[RATE_FEATURE] + list(MONTH_COLUMNS)].values, has_constant="raise")
         res = sm.OLS(y, X).fit(
             cov_type="HAC", cov_kwds={"maxlags": HAC_MAXLAGS, "use_correction": True}
         )
@@ -309,8 +325,9 @@ def regional_rate_stability() -> pd.DataFrame:
         rdf = rdf.sort_values("date").copy()
         bf, sf, tf, nf = _fit_subsample(rdf, None, None)
         be, se_e, te, ne = _fit_subsample(rdf, EARLY_START, EARLY_END)
-        bl, sl, tl, nl  = _fit_subsample(rdf, LATE_START, None)
-        ratio = float(abs(bl / be)) if (np.isfinite(be) and be != 0.0) else np.nan
+        bl, sl, tl, nl = _fit_subsample(rdf, LATE_START, None)
+        ratio = float(abs(bl / be)) if (np.isfinite(be) and
+                                        be != 0.0) else np.nan
         rows.append({
             "region":               region,
             "full_sample_beta":     round(bf, 6) if np.isfinite(bf) else np.nan,
@@ -354,9 +371,12 @@ def write_summary(
     model_row = overall[overall["benchmark"] == "model"].iloc[0]
     zero_row = overall[overall["benchmark"] == "zero"].iloc[0]
     mean12_row = overall[overall["benchmark"] == "mean12"].iloc[0]
-    rolling_3m = rolling[(rolling["benchmark"] == "model") & (rolling["horizon_months"] == 3)].iloc[0]
-    unstable_features = stability[stability["interpretation"] == "unstable"]["feature"].tolist()
-    episodic_features = stability[stability["interpretation"] == "episodic_not_identified_late"]["feature"].tolist()
+    rolling_3m = rolling[(rolling["benchmark"] == "model") & (
+        rolling["horizon_months"] == 3)].iloc[0]
+    unstable_features = stability[stability["interpretation"] ==
+                                  "unstable"]["feature"].tolist()
+    episodic_features = stability[stability["interpretation"] ==
+                                  "episodic_not_identified_late"]["feature"].tolist()
     within_band_ratio = float(plausibility["within_hist_10_90_band"].mean())
     avg_tail_gap = float(plausibility["tail_risk_gap"].mean())
 
@@ -395,9 +415,12 @@ Generated: {datetime.now(timezone.utc).isoformat(timespec="seconds")}
 
 
 def write_forecast_note(rolling: pd.DataFrame, bias: pd.DataFrame) -> None:
-    model_1m = rolling[(rolling["benchmark"] == "model") & (rolling["horizon_months"] == 1)].iloc[0]
-    zero_1m = rolling[(rolling["benchmark"] == "zero") & (rolling["horizon_months"] == 1)].iloc[0]
-    model_3m = rolling[(rolling["benchmark"] == "model") & (rolling["horizon_months"] == 3)].iloc[0]
+    model_1m = rolling[(rolling["benchmark"] == "model") &
+                       (rolling["horizon_months"] == 1)].iloc[0]
+    zero_1m = rolling[(rolling["benchmark"] == "zero") &
+                      (rolling["horizon_months"] == 1)].iloc[0]
+    model_3m = rolling[(rolling["benchmark"] == "model") &
+                       (rolling["horizon_months"] == 3)].iloc[0]
     model_bias = bias[bias["benchmark"] == "model"].copy()
     largest_bias = model_bias.loc[model_bias["bias"].abs().idxmax()]
     note = f"""# Auxiliary Forecast Validation Note
@@ -431,12 +454,13 @@ def write_forecast_note(rolling: pd.DataFrame, bias: pd.DataFrame) -> None:
 def run_validation_pack() -> ValidationPackResult:
     overall, by_region, rolling, bias, directional = forecast_benchmark()
     stability = coefficient_stability()
-    reg_stability = regional_rate_stability()
+    regional_rate_stability()
     plausibility = simulation_plausibility()
     write_summary(overall, rolling, stability, plausibility)
     write_forecast_note(rolling, bias)
     return ValidationPackResult(
-        generated_at_utc=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        generated_at_utc=datetime.now(
+            timezone.utc).isoformat(timespec="seconds"),
         forecast_overall=str(FORECAST_OVERALL_PATH),
         forecast_by_region=str(FORECAST_REGION_PATH),
         forecast_rolling=str(FORECAST_ROLLING_PATH),

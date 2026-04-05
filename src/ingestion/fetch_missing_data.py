@@ -14,8 +14,6 @@ Run:
 
 import io
 import re
-import time
-import zipfile
 import requests
 import pandas as pd
 from pathlib import Path
@@ -94,7 +92,8 @@ def fetch_regional_earnings() -> pd.DataFrame:
     # For Scotland and NI: supplement from Nomis ASHE
     try:
         nomis_df = _earnings_from_nomis()
-        scot_ni = nomis_df[nomis_df["region"].isin(["Scotland", "Northern Ireland"])]
+        scot_ni = nomis_df[nomis_df["region"].isin(
+            ["Scotland", "Northern Ireland"])]
         if not scot_ni.empty:
             if df is None:
                 df = scot_ni
@@ -102,14 +101,17 @@ def fetch_regional_earnings() -> pd.DataFrame:
                 df = pd.concat([df, scot_ni], ignore_index=True)
             print(f"  Nomis supplement for Scotland/NI: {len(scot_ni)} rows")
     except Exception as e:
-        print(f"  Nomis supplement failed ({e}) — Scotland/NI earnings will be missing")
+        print(
+            f"  Nomis supplement failed ({e}) — Scotland/NI earnings will be missing")
 
     if df is None or df.empty:
-        raise RuntimeError("All earnings sources failed — check internet connection")
+        raise RuntimeError(
+            "All earnings sources failed — check internet connection")
 
     # Ensure date is Dec-31 of each year (annual mid-point convention)
     df["date"] = pd.to_datetime(df["date"])
-    df = df[df["date"].dt.year >= 2000].sort_values(["region", "date"]).reset_index(drop=True)
+    df = df[df["date"].dt.year >= 2000].sort_values(
+        ["region", "date"]).reset_index(drop=True)
 
     path = DATA_RAW / "ons_earnings_regional.csv"
     df.to_csv(path, index=False)
@@ -186,24 +188,29 @@ def _earnings_from_nomis() -> pd.DataFrame:
     r = requests.get(url, headers=_HEADERS, timeout=60)
     r.raise_for_status()
     if not r.text.strip():
-        raise ValueError("Nomis returned empty response for Scotland/NI earnings")
+        raise ValueError(
+            "Nomis returned empty response for Scotland/NI earnings")
 
     raw = pd.read_csv(io.StringIO(r.text))
     raw.columns = [c.strip().lower() for c in raw.columns]
-    year_col = next((c for c in raw.columns if "date" in c or "time" in c), None)
+    year_col = next(
+        (c for c in raw.columns if "date" in c or "time" in c), None)
     if year_col is None:
-        raise ValueError(f"No year column in Nomis earnings response: {raw.columns.tolist()}")
+        raise ValueError(
+            f"No year column in Nomis earnings response: {raw.columns.tolist()}")
     raw = raw.rename(columns={
         year_col: "year",
         "geography_name": "region_raw",
         "obs_value": "median_annual_earnings",
     })
-    raw["region"] = raw["region_raw"].map(lambda x: _NAME_MAP.get(str(x).strip())
-                                          or _NAME_MAP.get(str(x).strip().title()))
+    raw["region"] = raw["region_raw"].map(lambda x: _NAME_MAP.get(str(x).strip()) or
+                                          _NAME_MAP.get(str(x).strip().title()))
     raw = raw.dropna(subset=["region", "median_annual_earnings"])
     raw = raw[raw["region"].isin(_REGIONS)]
-    raw["date"] = pd.to_datetime(raw["year"].astype(str).str[:4] + "-12-31", errors="coerce")
-    raw["median_annual_earnings"] = pd.to_numeric(raw["median_annual_earnings"], errors="coerce")
+    raw["date"] = pd.to_datetime(raw["year"].astype(
+        str).str[:4] + "-12-31", errors="coerce")
+    raw["median_annual_earnings"] = pd.to_numeric(
+        raw["median_annual_earnings"], errors="coerce")
     return raw[["date", "region", "median_annual_earnings"]].dropna().sort_values(["region", "date"]).reset_index(drop=True)
 
 
@@ -267,7 +274,8 @@ def fetch_regional_population() -> pd.DataFrame:
     # Fill gaps — interpolate if we have at least 2 points per region
     df = _fill_population_gaps(df)
 
-    df = df[df["region"].isin(_REGIONS)].sort_values(["region", "date"]).reset_index(drop=True)
+    df = df[df["region"].isin(_REGIONS)].sort_values(
+        ["region", "date"]).reset_index(drop=True)
 
     path = DATA_RAW / "ons_population.csv"
     df.to_csv(path, index=False)
@@ -318,7 +326,7 @@ def _population_from_mye5() -> pd.DataFrame:
     records = []
     for _, row in raw.iloc[8:].iterrows():
         region_raw = str(row.iloc[1]).strip()
-        geo_type   = str(row.iloc[2]).strip() if len(row) > 2 else ""
+        str(row.iloc[2]).strip() if len(row) > 2 else ""
         region = _NAME_MAP.get(region_raw) or _NAME_MAP.get(region_raw.title())
         if not region or region not in _REGIONS:
             continue
@@ -408,19 +416,22 @@ def _population_from_nomis() -> pd.DataFrame:
     raw = pd.read_csv(io.StringIO(r.text))
     raw.columns = [c.strip().lower() for c in raw.columns]
     # Nomis returns DATE_NAME (filled) not TIME_NAME (empty) for this dataset
-    year_col = next((c for c in raw.columns if "date" in c or "time" in c), None)
+    year_col = next(
+        (c for c in raw.columns if "date" in c or "time" in c), None)
     if year_col is None:
-        raise ValueError(f"No year column found in Nomis response. Columns: {raw.columns.tolist()}")
+        raise ValueError(
+            f"No year column found in Nomis response. Columns: {raw.columns.tolist()}")
     raw = raw.rename(columns={
         year_col: "year",
         "geography_name": "region_raw",
         "obs_value": "population",
     })
-    raw["region"] = raw["region_raw"].map(lambda x: _NAME_MAP.get(str(x).strip())
-                                          or _NAME_MAP.get(str(x).strip().title()))
+    raw["region"] = raw["region_raw"].map(lambda x: _NAME_MAP.get(str(x).strip()) or
+                                          _NAME_MAP.get(str(x).strip().title()))
     raw = raw.dropna(subset=["region", "population"])
     raw = raw[raw["region"].isin(_REGIONS)]
-    raw["date"] = pd.to_datetime(raw["year"].astype(str).str[:4] + "-06-30", errors="coerce")
+    raw["date"] = pd.to_datetime(raw["year"].astype(
+        str).str[:4] + "-06-30", errors="coerce")
     raw["population"] = pd.to_numeric(raw["population"], errors="coerce")
     return raw[["date", "region", "population"]].dropna().sort_values(["region", "date"]).reset_index(drop=True)
 
@@ -435,14 +446,14 @@ def _parse_wide_region_table(raw: pd.DataFrame) -> pd.DataFrame:
     header_row = None
     for i in range(min(15, len(raw))):
         vals = [str(v) for v in raw.iloc[i]]
-        year_count = sum(1 for v in vals if re.match(r'19\d\d|20\d\d', v.strip()))
+        year_count = sum(1 for v in vals if re.match(
+            r'19\d\d|20\d\d', v.strip()))
         if year_count >= 5:
             header_row = i
             break
 
     # Try column-based layout: first col = region/area, rest = years
     if header_row is not None:
-        years = []
         year_cols = {}
         for j, v in enumerate(raw.iloc[header_row]):
             m = re.match(r'(19\d\d|20\d\d)', str(v).strip())
@@ -454,7 +465,8 @@ def _parse_wide_region_table(raw: pd.DataFrame) -> pd.DataFrame:
         records = []
         for _, row in raw.iloc[header_row + 1:].iterrows():
             region_raw = str(row.iloc[0]).strip()
-            region = _NAME_MAP.get(region_raw) or _NAME_MAP.get(region_raw.title())
+            region = _NAME_MAP.get(
+                region_raw) or _NAME_MAP.get(region_raw.title())
             if not region:
                 continue
             for yr, col in year_cols.items():
@@ -491,9 +503,11 @@ def _fill_population_gaps(df: pd.DataFrame) -> pd.DataFrame:
             continue
         # Reindex to annual June 30 dates 2000-2024
         try:
-            all_years = pd.date_range("2000-06-30", "2024-06-30", freq="YS-JUL")
+            all_years = pd.date_range(
+                "2000-06-30", "2024-06-30", freq="YS-JUL")
         except ValueError:
-            all_years = pd.date_range("2000-06-30", "2024-06-30", freq="AS-JUL")
+            all_years = pd.date_range(
+                "2000-06-30", "2024-06-30", freq="AS-JUL")
 
         combined_idx = sub.set_index("date").index.union(all_years)
         sub = sub.set_index("date").reindex(combined_idx)
@@ -525,21 +539,24 @@ def fetch_supply_missing_regions() -> pd.DataFrame:
     scot = _supply_scotland()
     if scot is not None and not scot.empty:
         frames.append(scot)
-        print(f"  Scotland: {len(scot)} rows ({scot['date'].dt.year.min()}–{scot['date'].dt.year.max()})")
+        print(
+            f"  Scotland: {len(scot)} rows ({scot['date'].dt.year.min()}–{scot['date'].dt.year.max()})")
     else:
         print("  Scotland: FAILED — check internet")
 
     wales = _supply_wales()
     if wales is not None and not wales.empty:
         frames.append(wales)
-        print(f"  Wales: {len(wales)} rows ({wales['date'].dt.year.min()}–{wales['date'].dt.year.max()})")
+        print(
+            f"  Wales: {len(wales)} rows ({wales['date'].dt.year.min()}–{wales['date'].dt.year.max()})")
     else:
         print("  Wales: FAILED — check internet")
 
     ni = _supply_ni()
     if ni is not None and not ni.empty:
         frames.append(ni)
-        print(f"  Northern Ireland: {len(ni)} rows ({ni['date'].dt.year.min()}–{ni['date'].dt.year.max()})")
+        print(
+            f"  Northern Ireland: {len(ni)} rows ({ni['date'].dt.year.min()}–{ni['date'].dt.year.max()})")
     else:
         print("  Northern Ireland: FAILED — check internet")
 
@@ -547,7 +564,8 @@ def fetch_supply_missing_regions() -> pd.DataFrame:
         raise RuntimeError("All supply sources for Scotland/Wales/NI failed")
 
     df = pd.concat(frames, ignore_index=True)
-    df = df[df["date"].dt.year >= 2000].sort_values(["region", "date"]).reset_index(drop=True)
+    df = df[df["date"].dt.year >= 2000].sort_values(
+        ["region", "date"]).reset_index(drop=True)
 
     path = DATA_RAW / "mhclg_supply_missing_regions.csv"
     df.to_csv(path, index=False)
@@ -589,8 +607,9 @@ def _supply_scotland() -> pd.DataFrame:
     r.raise_for_status()
     content = r.content
 
-    xl  = pd.ExcelFile(io.BytesIO(content))
-    raw = pd.read_excel(io.BytesIO(content), sheet_name="CompletionsFinancialYear", header=None)
+    pd.ExcelFile(io.BytesIO(content))
+    raw = pd.read_excel(io.BytesIO(content),
+                        sheet_name="CompletionsFinancialYear", header=None)
 
     # Find header row: the one where col 0 = "Area" (case-insensitive)
     header_row = None
@@ -600,21 +619,23 @@ def _supply_scotland() -> pd.DataFrame:
             break
 
     if header_row is None:
-        raise ValueError("Header row ('Area') not found in CompletionsFinancialYear sheet")
+        raise ValueError(
+            "Header row ('Area') not found in CompletionsFinancialYear sheet")
 
     # Build FY → column-index mapping
     fy_pat = re.compile(r'^(\d{4})-(\d{2})$')
     year_cols = {}
     for j in range(1, raw.shape[1]):
         cell = str(raw.iloc[header_row, j]).strip()
-        m    = fy_pat.match(cell)
+        m = fy_pat.match(cell)
         if m:
             start_year = int(m.group(1))
             if 1990 <= start_year <= 2030:
                 year_cols[start_year] = j
 
     if not year_cols:
-        raise ValueError("No financial year columns found in CompletionsFinancialYear")
+        raise ValueError(
+            "No financial year columns found in CompletionsFinancialYear")
 
     # Find the SCOTLAND row (first data row after header — typically header+1)
     scot_row = None
@@ -684,7 +705,8 @@ def _parse_scotland_completions(raw: pd.DataFrame) -> pd.DataFrame:
         # Identify a "Total" column: look in the header rows for "total" or "all sector"
         total_col = None
         for header_row in range(min(8, len(raw))):
-            header_vals = [safe_str(raw.iloc[header_row, c]).lower() for c in range(len(raw.columns))]
+            header_vals = [safe_str(raw.iloc[header_row, c]).lower()
+                           for c in range(len(raw.columns))]
             for c, hv in enumerate(header_vals):
                 if c == fy_col:
                     continue
@@ -708,7 +730,7 @@ def _parse_scotland_completions(raw: pd.DataFrame) -> pd.DataFrame:
             val = None
             if total_col is not None:
                 raw_val = safe_str(raw.iloc[i, total_col])
-                clean   = raw_val.replace(",", "").replace(" ", "").split(".")[0]
+                clean = raw_val.replace(",", "").replace(" ", "").split(".")[0]
                 if re.match(r'^\d+$', clean) and int(clean) > 100:
                     val = int(clean)
 
@@ -718,7 +740,7 @@ def _parse_scotland_completions(raw: pd.DataFrame) -> pd.DataFrame:
                 for c in range(len(raw.columns)):
                     if c == fy_col:
                         continue
-                    rv    = safe_str(raw.iloc[i, c])
+                    rv = safe_str(raw.iloc[i, c])
                     clean = rv.replace(",", "").replace(" ", "").split(".")[0]
                     if re.match(r'^\d+$', clean) and int(clean) > 100:
                         row_nums.append(int(clean))
@@ -738,7 +760,7 @@ def _parse_scotland_completions(raw: pd.DataFrame) -> pd.DataFrame:
     # ── Layout B: FY label appears somewhere in each row ──
     records = []
     for i in range(len(raw)):
-        row  = raw.iloc[i]
+        row = raw.iloc[i]
         vals = [safe_str(v) for v in row]
 
         fy_match = next((v for v in vals if fy_pat.match(v)), None)
@@ -821,7 +843,8 @@ def _parse_statswales_json(data: dict) -> pd.DataFrame:
 
     records = []
     for row in rows:
-        year_str = str(row.get("Year_ItemName_ENG", row.get("Period_ItemName_ENG", "")))
+        year_str = str(row.get("Year_ItemName_ENG",
+                       row.get("Period_ItemName_ENG", "")))
         val = row.get("Data", row.get("Value", None))
         tenure = str(row.get("Tenure_ItemName_ENG", "All")).lower()
 
@@ -846,8 +869,10 @@ def _parse_statswales_json(data: dict) -> pd.DataFrame:
 def _parse_statswales_csv(df: pd.DataFrame) -> pd.DataFrame:
     """Parse StatsWales CSV response."""
     df.columns = [c.strip().lower() for c in df.columns]
-    year_col  = next((c for c in df.columns if "year" in c or "period" in c), None)
-    val_col   = next((c for c in df.columns if "data" in c or "value" in c or "obs" in c), None)
+    year_col = next(
+        (c for c in df.columns if "year" in c or "period" in c), None)
+    val_col = next(
+        (c for c in df.columns if "data" in c or "value" in c or "obs" in c), None)
     if not year_col or not val_col:
         raise ValueError("Cannot find year/value columns in StatsWales CSV")
 
@@ -857,7 +882,7 @@ def _parse_statswales_csv(df: pd.DataFrame) -> pd.DataFrame:
         if m:
             yr = int(m.group(1))
             if 1999 <= yr <= 2030:
-                val = str(row[val_col]).replace(",","").strip()
+                val = str(row[val_col]).replace(",", "").strip()
                 if re.match(r'^\d+\.?\d*$', val):
                     records.append({
                         "date": pd.Timestamp(f"{yr}-04-01"),
@@ -920,7 +945,8 @@ def _parse_ni_excel(content: bytes) -> pd.DataFrame:
     records = []
     for sheet in xl.sheet_names:
         try:
-            raw = pd.read_excel(io.BytesIO(content), sheet_name=sheet, header=None)
+            raw = pd.read_excel(io.BytesIO(content),
+                                sheet_name=sheet, header=None)
             flat = str(raw.values).lower()
             if "complet" not in flat and "dwell" not in flat:
                 continue
@@ -930,9 +956,9 @@ def _parse_ni_excel(content: bytes) -> pd.DataFrame:
                     if m:
                         yr = int(m.group(1))
                         if 1999 <= yr <= 2030:
-                            nums = [int(str(x).replace(",","")) for x in row
-                                   if str(x).replace(",","").strip().isdigit()
-                                   and int(str(x).replace(",","")) > 100]
+                            nums = [int(str(x).replace(",", "")) for x in row
+                                    if str(x).replace(",", "").strip().isdigit() and
+                                    int(str(x).replace(",", "")) > 100]
                             if nums:
                                 records.append({
                                     "date": pd.Timestamp(f"{yr}-04-01"),
@@ -1009,7 +1035,8 @@ def fetch_affordability_ratio() -> pd.DataFrame:
         raise ValueError("No affordability ratio data parsed from sheet 1c")
 
     df = pd.DataFrame(records)
-    df = df[df["date"].dt.year >= 2000].sort_values(["region", "date"]).reset_index(drop=True)
+    df = df[df["date"].dt.year >= 2000].sort_values(
+        ["region", "date"]).reset_index(drop=True)
 
     path = DATA_RAW / "ons_affordability_ratio.csv"
     df.to_csv(path, index=False)
@@ -1056,7 +1083,8 @@ def run_quality_check():
         print(f"    Rows:      {len(df):,}")
         print(f"    Regions:   {sorted(df['region'].unique())}")
         if "date" in df.columns:
-            print(f"    Date range:{df['date'].min().date()} → {df['date'].max().date()}")
+            print(
+                f"    Date range:{df['date'].min().date()} → {df['date'].max().date()}")
         nulls = df[value_col].isna().sum()
         zeros = (df[value_col] == 0).sum()
         print(f"    Nulls in {value_col}: {nulls}")
@@ -1067,13 +1095,14 @@ def run_quality_check():
         if missing:
             print(f"    Missing regions: {missing}")
         else:
-            print(f"    All 12 regions present: YES")
+            print("    All 12 regions present: YES")
 
         # Anomaly check: values outside plausible ranges
         if value_col == "median_annual_earnings":
             anomalies = df[(df[value_col] < 5000) | (df[value_col] > 200000)]
         elif value_col == "population":
-            anomalies = df[(df[value_col] < 500_000) | (df[value_col] > 15_000_000)]
+            anomalies = df[(df[value_col] < 500_000) |
+                           (df[value_col] > 15_000_000)]
         elif value_col == "net_additions":
             anomalies = df[(df[value_col] < 0) | (df[value_col] > 100_000)]
         elif value_col == "price_to_income_ratio":
@@ -1082,9 +1111,10 @@ def run_quality_check():
             anomalies = pd.DataFrame()
 
         if not anomalies.empty:
-            print(f"    Anomalies: {len(anomalies)} rows outside expected range")
+            print(
+                f"    Anomalies: {len(anomalies)} rows outside expected range")
         else:
-            print(f"    Anomalies: none")
+            print("    Anomalies: none")
 
     print("\n" + "="*60)
 
@@ -1104,7 +1134,7 @@ def _print_summary(label: str, df: pd.DataFrame, value_col: str, path: Path):
     regions = sorted(df["region"].unique())
     date_min = df["date"].min().date() if "date" in df.columns else "?"
     date_max = df["date"].max().date() if "date" in df.columns else "?"
-    nulls    = df[value_col].isna().sum()
+    nulls = df[value_col].isna().sum()
     print(f"  Saved {len(df):,} rows → {path.name}")
     print(f"    Regions: {regions}")
     print(f"    Range:   {date_min} → {date_max}")
@@ -1125,7 +1155,7 @@ def run_all():
         ("Earnings",     fetch_regional_earnings),
         ("Population",   fetch_regional_population),
         ("Supply",       fetch_supply_missing_regions),
-        ("Affordability",fetch_affordability_ratio),
+        ("Affordability", fetch_affordability_ratio),
     ]:
         try:
             fn()

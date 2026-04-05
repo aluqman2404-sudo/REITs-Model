@@ -28,6 +28,14 @@ Run:
 """
 
 from __future__ import annotations
+from statsmodels.tsa.stattools import adfuller, kpss
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+import statsmodels.api as sm
+import seaborn as sns
+import pandas as pd
+import numpy as np
+import matplotlib.ticker as mtick
+import matplotlib.pyplot as plt
 
 import warnings
 from datetime import datetime
@@ -35,30 +43,22 @@ from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")          # headless — no display required
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mtick
-import numpy as np
-import pandas as pd
-import seaborn as sns
-import statsmodels.api as sm
-from statsmodels.stats.outliers_influence import variance_inflation_factor
-from statsmodels.tsa.stattools import adfuller, kpss
 
 warnings.filterwarnings("ignore")
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
-ROOT    = Path(__file__).resolve().parents[2]
-PROC    = ROOT / "data" / "processed"
-OUT     = ROOT / "data" / "outputs"
+ROOT = Path(__file__).resolve().parents[2]
+PROC = ROOT / "data" / "processed"
+OUT = ROOT / "data" / "outputs"
 OUT.mkdir(parents=True, exist_ok=True)
 
-INPUT_FILE       = PROC / "master_dataset_engineered.csv"
-OLS_READY_FILE   = PROC / "ols_ready_dataset.csv"
-CORR_PLOT        = OUT  / "correlation_matrix.png"
-STATIONARITY_TXT = OUT  / "stationarity_report.txt"
-OUTLIER_TXT      = OUT  / "outlier_report.txt"
-OUTLIER_PLOT     = OUT  / "price_growth_outliers.png"
-SUMMARY_TXT      = OUT  / "pre_ols_validation_report.txt"
+INPUT_FILE = PROC / "master_dataset_engineered.csv"
+OLS_READY_FILE = PROC / "ols_ready_dataset.csv"
+CORR_PLOT = OUT / "correlation_matrix.png"
+STATIONARITY_TXT = OUT / "stationarity_report.txt"
+OUTLIER_TXT = OUT / "outlier_report.txt"
+OUTLIER_PLOT = OUT / "price_growth_outliers.png"
+SUMMARY_TXT = OUT / "pre_ols_validation_report.txt"
 
 # ── Variable sets ──────────────────────────────────────────────────────────────
 OLS_INDEP = [
@@ -124,7 +124,8 @@ def _load_data() -> pd.DataFrame:
     _hdr("LOADING DATA")
     df = pd.read_csv(INPUT_FILE, parse_dates=["date"])
     df = df.sort_values(["region", "date"]).reset_index(drop=True)
-    print(f"  Loaded {len(df):,} rows × {len(df.columns)} cols from {INPUT_FILE.name}")
+    print(
+        f"  Loaded {len(df):,} rows × {len(df.columns)} cols from {INPUT_FILE.name}")
 
     # price_growth_lag1 is not in the engineered dataset — derive it here
     df["price_growth_lag1"] = (
@@ -159,7 +160,8 @@ def check1_multicollinearity(df: pd.DataFrame) -> tuple[str, list[str]]:
     present = [v for v in CORR_VARS if v in df.columns]
     missing = [v for v in CORR_VARS if v not in df.columns]
     if missing:
-        print(f"  WARNING: these columns not found and will be skipped: {missing}")
+        print(
+            f"  WARNING: these columns not found and will be skipped: {missing}")
 
     corr_df = df[present].dropna().corr(method="pearson").round(2)
 
@@ -167,8 +169,8 @@ def check1_multicollinearity(df: pd.DataFrame) -> tuple[str, list[str]]:
     print("\n" + corr_df.to_string())
 
     # Flag high / severe pairs (upper triangle only to avoid duplicates)
-    severe_pairs  = []
-    high_pairs    = []
+    severe_pairs = []
+    high_pairs = []
     n = len(present)
     for i in range(n):
         for j in range(i + 1, n):
@@ -184,8 +186,8 @@ def check1_multicollinearity(df: pd.DataFrame) -> tuple[str, list[str]]:
         print("  ⚠️  SEVERE multicollinearity (|r| > 0.90):")
         for v1, v2, r in severe_pairs:
             print(f"    {v1} ↔ {v2}: r = {r:+.2f}")
-            print(f"    → Using both in OLS will make coefficients highly unstable.")
-            print(f"      Consider dropping the less theoretically important variable.")
+            print("    → Using both in OLS will make coefficients highly unstable.")
+            print("      Consider dropping the less theoretically important variable.")
     else:
         print("  No SEVERE pairs (|r| > 0.90) found.")
 
@@ -194,12 +196,13 @@ def check1_multicollinearity(df: pd.DataFrame) -> tuple[str, list[str]]:
         print("  ⚠️  HIGH multicollinearity (|r| > 0.80):")
         for v1, v2, r in high_pairs:
             print(f"    {v1} ↔ {v2}: r = {r:+.2f}")
-            print(f"    → Coefficients may be imprecise; monitor VIF before dropping.")
+            print("    → Coefficients may be imprecise; monitor VIF before dropping.")
     else:
         print("  No HIGH pairs (|r| > 0.80) found.")
 
     # Heatmap
-    fig, ax = plt.subplots(figsize=(max(10, len(present)), max(8, len(present) - 1)))
+    fig, ax = plt.subplots(
+        figsize=(max(10, len(present)), max(8, len(present) - 1)))
     sns.heatmap(
         corr_df,
         ax=ax,
@@ -212,7 +215,8 @@ def check1_multicollinearity(df: pd.DataFrame) -> tuple[str, list[str]]:
         annot_kws={"size": 8},
         cbar_kws={"shrink": 0.8, "label": "Pearson r"},
     )
-    ax.set_title("Pearson Correlation Matrix — OLS Variables", fontsize=13, pad=14)
+    ax.set_title("Pearson Correlation Matrix — OLS Variables",
+                 fontsize=13, pad=14)
     plt.xticks(rotation=45, ha="right", fontsize=8)
     plt.yticks(rotation=0, fontsize=8)
     plt.tight_layout()
@@ -223,8 +227,8 @@ def check1_multicollinearity(df: pd.DataFrame) -> tuple[str, list[str]]:
     # ── 1b  VIF ────────────────────────────────────────────────────────────
     _subhdr("1b  Variance Inflation Factors (VIF)")
 
-    vif_vars   = [v for v in OLS_INDEP if v in df.columns]
-    vif_data   = df[vif_vars].dropna()
+    vif_vars = [v for v in OLS_INDEP if v in df.columns]
+    vif_data = df[vif_vars].dropna()
     vif_matrix = sm.add_constant(vif_data)
 
     print(f"\n  {'Variable':<28}  {'VIF':>8}  Status")
@@ -248,7 +252,8 @@ def check1_multicollinearity(df: pd.DataFrame) -> tuple[str, list[str]]:
 
     print()
     if drop_recs:
-        print(f"  VIF RECOMMENDATION: consider dropping {drop_recs} before OLS.")
+        print(
+            f"  VIF RECOMMENDATION: consider dropping {drop_recs} before OLS.")
     else:
         print("  VIF RECOMMENDATION: no variables need to be dropped (all VIF ≤ 10).")
 
@@ -284,7 +289,7 @@ def _run_kpss(series: pd.Series) -> tuple[float, float]:
 
 def _stationarity_verdict(adf_p: float, kpss_p: float) -> str:
     """Map ADF + KPSS p-values to a combined verdict string."""
-    adf_stat  = adf_p < 0.05
+    adf_stat = adf_p < 0.05
     kpss_stat = kpss_p > 0.05
     if adf_stat and kpss_stat:
         return "PASS ✅ — Both stationary — safe to use in OLS"
@@ -352,17 +357,19 @@ def check2_stationarity(df: pd.DataFrame) -> tuple[str, list[str]]:
                 pass
 
         # Average across regions
-        avg_adf_stat  = float(np.mean(adf_stats))  if adf_stats  else np.nan
-        avg_adf_p     = float(np.mean(adf_pvals))  if adf_pvals  else np.nan
+        avg_adf_stat = float(np.mean(adf_stats)) if adf_stats else np.nan
+        avg_adf_p = float(np.mean(adf_pvals)) if adf_pvals else np.nan
         avg_kpss_stat = float(np.mean(kpss_stats)) if kpss_stats else np.nan
-        avg_kpss_p    = float(np.mean(kpss_pvals)) if kpss_pvals else np.nan
+        avg_kpss_p = float(np.mean(kpss_pvals)) if kpss_pvals else np.nan
 
-        adf_verdict  = "STATIONARY ✅" if avg_adf_p  < 0.05 else "NON-STATIONARY ⚠️"
+        adf_verdict = "STATIONARY ✅" if avg_adf_p < 0.05 else "NON-STATIONARY ⚠️"
         kpss_verdict = "STATIONARY ✅" if avg_kpss_p > 0.05 else "NON-STATIONARY ⚠️"
-        combined     = _stationarity_verdict(avg_adf_p, avg_kpss_p)
+        combined = _stationarity_verdict(avg_adf_p, avg_kpss_p)
 
-        adf_line  = (f"  ADF  stat={avg_adf_stat:>8.4f}  p={avg_adf_p:.4f}  → {adf_verdict}")
-        kpss_line = (f"  KPSS stat={avg_kpss_stat:>8.4f}  p={avg_kpss_p:.4f}  → {kpss_verdict}")
+        adf_line = (
+            f"  ADF  stat={avg_adf_stat:>8.4f}  p={avg_adf_p:.4f}  → {adf_verdict}")
+        kpss_line = (
+            f"  KPSS stat={avg_kpss_stat:>8.4f}  p={avg_kpss_p:.4f}  → {kpss_verdict}")
         comb_line = (f"  Combined: {combined}")
 
         for ln in [adf_line, kpss_line, comb_line]:
@@ -400,8 +407,9 @@ def check2_stationarity(df: pd.DataFrame) -> tuple[str, list[str]]:
                 except Exception:
                     pass
 
-            d_adf_p  = float(np.mean(d_adf_p_list))  if d_adf_p_list  else np.nan
-            d_kpss_p = float(np.mean(d_kpss_p_list)) if d_kpss_p_list else np.nan
+            d_adf_p = float(np.mean(d_adf_p_list)) if d_adf_p_list else np.nan
+            d_kpss_p = float(np.mean(d_kpss_p_list)
+                             ) if d_kpss_p_list else np.nan
             d_verdict = _stationarity_verdict(d_adf_p, d_kpss_p)
 
             resolved = "PASS" in d_verdict
@@ -483,7 +491,7 @@ def check3_missing_values(df: pd.DataFrame) -> tuple[str, pd.DataFrame]:
         "earnings_lag1":      ("1 per region (first obs)",      12),
         "supply_lag6":        ("6 per region (first 6 months)", 72),
         "gross_yield_pct":    ("data coverage gaps",            None),
-        "log_price_to_income":("derived — should be 0",         0),
+        "log_price_to_income": ("derived — should be 0",         0),
     }
 
     any_unexpected = False
@@ -491,7 +499,7 @@ def check3_missing_values(df: pd.DataFrame) -> tuple[str, pd.DataFrame]:
         if var not in df.columns:
             print(f"  {var:<28}  {'COLUMN MISSING':>17}")
             continue
-        n   = df[var].isna().sum()
+        n = df[var].isna().sum()
         pct = 100 * n / len(df)
         exp_str, exp_n = expected.get(var, ("—", None))
         flag = ""
@@ -505,22 +513,25 @@ def check3_missing_values(df: pd.DataFrame) -> tuple[str, pd.DataFrame]:
 
     avail_vars = [v for v in ols_vars if v in df.columns]
     rows_before = len(df)
-    ols_df      = df.dropna(subset=avail_vars).copy()
-    rows_after  = len(ols_df)
-    dropped     = rows_before - rows_after
+    ols_df = df.dropna(subset=avail_vars).copy()
+    rows_after = len(ols_df)
+    dropped = rows_before - rows_after
 
     print(f"\n  Rows before drop:  {rows_before:,}")
     print(f"  Rows after drop:   {rows_after:,}")
-    print(f"  Rows dropped:      {dropped}  (expected ~72 = 6 per region × 12 regions)")
+    print(
+        f"  Rows dropped:      {dropped}  (expected ~72 = 6 per region × 12 regions)")
 
     # Flag if dropped count is very different from expected 72
     if dropped > 120:
-        print(f"  ⚠️  WARNING: dropped {dropped} rows — substantially more than expected 72.")
+        print(
+            f"  ⚠️  WARNING: dropped {dropped} rows — substantially more than expected 72.")
         any_unexpected = True
     elif dropped < 60:
-        print(f"  ⚠️  NOTE: dropped only {dropped} rows — fewer than expected 72.")
+        print(
+            f"  ⚠️  NOTE: dropped only {dropped} rows — fewer than expected 72.")
     else:
-        print(f"  ✅ Drop count is within expected range.")
+        print("  ✅ Drop count is within expected range.")
 
     # ── Per-region row counts after drop ──────────────────────────────────
     _subhdr("Rows per region after dropping NaNs")
@@ -536,7 +547,8 @@ def check3_missing_values(df: pd.DataFrame) -> tuple[str, pd.DataFrame]:
         print("\n  ⚠️  WARNING: unequal row counts across regions.")
         any_unexpected = True
     else:
-        print(f"\n  ✅ All regions have {region_counts.iloc[0]} rows — balanced panel.")
+        print(
+            f"\n  ✅ All regions have {region_counts.iloc[0]} rows — balanced panel.")
 
     # ── Save OLS-ready dataset ─────────────────────────────────────────────
     ols_df.to_csv(OLS_READY_FILE, index=False)
@@ -588,7 +600,7 @@ def check4_outliers(df: pd.DataFrame, ols_df: pd.DataFrame) -> str:
     _subhdr("4a  Price Growth Outliers (3-sigma rule)")
 
     pg_mean = ols_df["price_growth"].mean()
-    pg_std  = ols_df["price_growth"].std()
+    pg_std = ols_df["price_growth"].std()
     threshold = 3 * pg_std
 
     ols_df = ols_df.copy()
@@ -605,9 +617,11 @@ def check4_outliers(df: pd.DataFrame, ols_df: pd.DataFrame) -> str:
         lines.append(msg)
     else:
         print(f"\n  Found {len(pg_outliers)} price growth outliers:")
-        print(f"\n  {'Date':<12}  {'Region':<35}  {'price_growth':>13}  {'Z-score':>8}")
+        print(
+            f"\n  {'Date':<12}  {'Region':<35}  {'price_growth':>13}  {'Z-score':>8}")
         print(f"  {'─'*12}  {'─'*35}  {'─'*13}  {'─'*8}")
-        lines.append(f"\n  {'Date':<12}  {'Region':<35}  {'price_growth':>13}  {'Z-score':>8}")
+        lines.append(
+            f"\n  {'Date':<12}  {'Region':<35}  {'price_growth':>13}  {'Z-score':>8}")
         lines.append(f"  {'─'*12}  {'─'*35}  {'─'*13}  {'─'*8}")
 
         for _, row in pg_outliers.sort_values("pg_zscore", key=abs, ascending=False).iterrows():
@@ -623,7 +637,7 @@ def check4_outliers(df: pd.DataFrame, ols_df: pd.DataFrame) -> str:
         ).size().sort_index()
         print(f"\n  {'Quarter':<10}  {'Count':>6}")
         print(f"  {'─'*10}  {'─'*6}")
-        lines.append(f"\n  Outlier clustering by quarter:")
+        lines.append("\n  Outlier clustering by quarter:")
         for period, cnt in date_counts.items():
             ln = f"  {str(period):<10}  {cnt:>6}"
             print(ln)
@@ -638,7 +652,8 @@ def check4_outliers(df: pd.DataFrame, ols_df: pd.DataFrame) -> str:
             "2022": "BoE rate shock / cost-of-living crisis",
         }
         pg_outliers_copy = pg_outliers.copy()
-        pg_outliers_copy["year"] = pd.to_datetime(pg_outliers_copy["date"]).dt.year.astype(str)
+        pg_outliers_copy["year"] = pd.to_datetime(
+            pg_outliers_copy["date"]).dt.year.astype(str)
         for yr, label in event_periods.items():
             n = (pg_outliers_copy["year"] == yr).sum()
             if n > 0:
@@ -650,10 +665,10 @@ def check4_outliers(df: pd.DataFrame, ols_df: pd.DataFrame) -> str:
         _subhdr("Outliers per region")
         region_out = pg_outliers.groupby("region").size()
         print(f"\n  {'Region':<35}  {'Outliers':>8}")
-        lines.append(f"\n  Outliers per region:")
+        lines.append("\n  Outliers per region:")
         for region in REGIONS:
             cnt = region_out.get(region, 0)
-            ln  = f"  {region:<35}  {cnt:>8}"
+            ln = f"  {region:<35}  {cnt:>8}"
             print(ln)
             lines.append(ln)
 
@@ -665,7 +680,7 @@ def check4_outliers(df: pd.DataFrame, ols_df: pd.DataFrame) -> str:
     sup_col = "net_additions_monthly"
     if sup_col in ols_df.columns:
         sup_mean = ols_df[sup_col].mean()
-        sup_std  = ols_df[sup_col].std()
+        sup_std = ols_df[sup_col].std()
         ols_df["sup_zscore"] = _zscore(ols_df[sup_col])
         sup_outliers = ols_df[ols_df["sup_zscore"].abs() > 3]
 
@@ -679,8 +694,8 @@ def check4_outliers(df: pd.DataFrame, ols_df: pd.DataFrame) -> str:
             lines.append(msg)
         else:
             print(f"  Found {len(sup_outliers)} supply outliers.")
-            lines.append(f"  NOTE: supply outliers are less critical for the SDE "
-                         f"but should be documented.")
+            lines.append("  NOTE: supply outliers are less critical for the SDE "
+                         "but should be documented.")
             for _, row in sup_outliers.head(10).iterrows():
                 ln = (f"  {str(row['date'])[:10]}  {row['region']:<35}  "
                       f"{row[sup_col]:>10.1f}  z={row['sup_zscore']:>+6.2f}")
@@ -693,17 +708,17 @@ def check4_outliers(df: pd.DataFrame, ols_df: pd.DataFrame) -> str:
     _subhdr("4c  OLS Comparison: With vs Without Outliers")
 
     avail_indep = [v for v in OLS_INDEP if v in ols_df.columns]
-    y       = ols_df[OLS_DEP]
-    X_raw   = sm.add_constant(ols_df[avail_indep])
+    y = ols_df[OLS_DEP]
+    X_raw = sm.add_constant(ols_df[avail_indep])
 
     # With outliers
     model_with = sm.OLS(y, X_raw, missing="drop").fit()
 
     # Without outliers (drop rows where |pg_zscore| > 3)
-    clean_mask   = ols_df["pg_zscore"].abs() <= 3
-    ols_clean    = ols_df[clean_mask]
-    y_clean      = ols_clean[OLS_DEP]
-    X_clean      = sm.add_constant(ols_clean[avail_indep])
+    clean_mask = ols_df["pg_zscore"].abs() <= 3
+    ols_clean = ols_df[clean_mask]
+    y_clean = ols_clean[OLS_DEP]
+    X_clean = sm.add_constant(ols_clean[avail_indep])
     model_without = sm.OLS(y_clean, X_clean, missing="drop").fit()
 
     # Build comparison table
@@ -716,18 +731,20 @@ def check4_outliers(df: pd.DataFrame, ols_df: pd.DataFrame) -> str:
         "price_growth_lag1":   "beta_lag",
     }
 
-    print(f"\n  Outliers dropped in 'without' version: {len(ols_df) - len(ols_clean)}")
-    print(f"\n  {'Metric':<28}  {'With outliers':>15}  {'Without outliers':>16}  {'Δ%':>6}")
+    print(
+        f"\n  Outliers dropped in 'without' version: {len(ols_df) - len(ols_clean)}")
+    print(
+        f"\n  {'Metric':<28}  {'With outliers':>15}  {'Without outliers':>16}  {'Δ%':>6}")
     print(f"  {'─'*28}  {'─'*15}  {'─'*16}  {'─'*6}")
 
     comparison_lines = [
-        f"\n  OLS Comparison: With vs Without Outliers",
+        "\n  OLS Comparison: With vs Without Outliers",
         f"  {'Metric':<28}  {'With outliers':>15}  {'Without outliers':>16}  {'Δ%':>6}",
         f"  {'─'*28}  {'─'*15}  {'─'*16}  {'─'*6}",
     ]
 
     # R-squared
-    r2_w  = model_with.rsquared
+    r2_w = model_with.rsquared
     r2_wo = model_without.rsquared
     delta_str = f"{100 * (r2_wo - r2_w) / abs(r2_w):+.1f}%" if r2_w != 0 else "—"
     ln = f"  {'R-squared':<28}  {r2_w:>15.4f}  {r2_wo:>16.4f}  {delta_str:>6}"
@@ -739,11 +756,11 @@ def check4_outliers(df: pd.DataFrame, ols_df: pd.DataFrame) -> str:
     for var, lbl in label_map.items():
         if var not in avail_indep:
             continue
-        c_w  = model_with.params.get(var, np.nan)
+        c_w = model_with.params.get(var, np.nan)
         c_wo = model_without.params.get(var, np.nan)
         if abs(c_w) > 1e-10:
             pct_change = 100 * abs(c_wo - c_w) / abs(c_w)
-            delta_str  = f"{pct_change:+.1f}%"
+            delta_str = f"{pct_change:+.1f}%"
             if pct_change > 20:
                 coef_changes_large = True
                 delta_str += " ⚠️"
@@ -772,13 +789,14 @@ def check4_outliers(df: pd.DataFrame, ols_df: pd.DataFrame) -> str:
     _subhdr("Saving outlier plot")
 
     pg_regions = [r for r in REGIONS if r in ols_df["region"].values]
-    ncols  = 3
-    nrows  = int(np.ceil(len(pg_regions) / ncols))
-    fig, axes = plt.subplots(nrows, ncols, figsize=(18, nrows * 3), sharey=True)
-    axes   = axes.flatten()
+    ncols = 3
+    nrows = int(np.ceil(len(pg_regions) / ncols))
+    fig, axes = plt.subplots(
+        nrows, ncols, figsize=(18, nrows * 3), sharey=True)
+    axes = axes.flatten()
 
     for idx, region in enumerate(pg_regions):
-        ax  = axes[idx]
+        ax = axes[idx]
         sub = ols_df[ols_df["region"] == region].sort_values("date")
         out = sub[sub["pg_zscore"].abs() > 3]
 
@@ -791,7 +809,8 @@ def check4_outliers(df: pd.DataFrame, ols_df: pd.DataFrame) -> str:
         ax.set_title(region, fontsize=8)
         ax.xaxis.set_major_locator(plt.MaxNLocator(4))
         ax.tick_params(axis="both", labelsize=6)
-        ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1, decimals=1))
+        ax.yaxis.set_major_formatter(
+            mtick.PercentFormatter(xmax=1, decimals=1))
 
     # Hide unused subplots
     for idx in range(len(pg_regions), len(axes)):
@@ -890,7 +909,8 @@ def main() -> None:
     status4 = check4_outliers(df, ols_df)
 
     # Summary
-    _final_summary(status1, status2, status3, status4, ols_df, drop_recs, failed_stats)
+    _final_summary(status1, status2, status3, status4,
+                   ols_df, drop_recs, failed_stats)
 
 
 if __name__ == "__main__":

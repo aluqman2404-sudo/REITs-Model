@@ -70,7 +70,8 @@ def _weighted_average(component_scores: dict[str, float], weights: dict[str, flo
     total = sum(weights.values())
     if total <= 0:
         raise ValueError("weights must sum to a positive number")
-    raw = sum(component_scores[name] * weights[name] for name in weights) / total
+    raw = sum(component_scores[name] * weights[name]
+              for name in weights) / total
     return _clip_score(raw)
 
 
@@ -217,23 +218,25 @@ def consumer_signal_dashboard(
         raise ValueError("income must be positive")
     if deposit < 0:
         raise ValueError("deposit must be non-negative")
-    property_price = float(property_price or simulation_percentiles.get("start_price", 300000.0))
+    property_price = float(
+        property_price or simulation_percentiles.get("start_price", 300000.0))
     if property_price <= 0:
         raise ValueError("property_price must be positive")
     if mortgage_term_years <= 0:
         raise ValueError("mortgage_term_years must be positive")
 
     loan_amount = max(property_price - deposit, 0.0)
-    payment = _mortgage_payment(loan_amount, mortgage_rate, mortgage_term_years)
+    payment = _mortgage_payment(
+        loan_amount, mortgage_rate, mortgage_term_years)
     payment_ratio = (payment * 12.0) / income
     loan_to_income = loan_amount / income
     ltv = loan_amount / property_price if property_price > 0 else 0.0
 
     affordability_score = _clip_score(
-        100.0
-        - max(0.0, loan_to_income - _AFFORDABILITY_MULTIPLE) * 18.0
-        - max(0.0, payment_ratio - 0.30) * 140.0
-        - max(0.0, ltv - 0.80) * 120.0
+        100.0 -
+        max(0.0, loan_to_income - _AFFORDABILITY_MULTIPLE) * 18.0 -
+        max(0.0, payment_ratio - 0.30) * 140.0 -
+        max(0.0, ltv - 0.80) * 120.0
     )
     # WEIGHT: 0.65  (cycle_signal contribution to cycle_outlook blend)
     # JUSTIFICATION: expert-prior — not-yet-empirically-optimised
@@ -247,8 +250,10 @@ def consumer_signal_dashboard(
     #   (scenario signal has wider cross-sectional spread than cycle_signal;
     #   higher sensitivity despite identical blend weight)
     # LAST_REVIEWED: 2026-03-21
-    cycle_outlook = _clip_score(0.65 * cycle_signal + 0.35 * _scenario_signal_score(simulation_percentiles))
-    downside_resilience = _downside_score(simulation_percentiles, downside_prob)
+    cycle_outlook = _clip_score(
+        0.65 * cycle_signal + 0.35 * _scenario_signal_score(simulation_percentiles))
+    downside_resilience = _downside_score(
+        simulation_percentiles, downside_prob)
 
     signals = [
         _signal_card(
@@ -288,9 +293,11 @@ def consumer_signal_dashboard(
             note="Important for the buyer, but not backtested as a return-predictive signal.",
         ),
     ]
-    signal_scores = {signal["id"]: float(signal["score"]) for signal in signals}
+    signal_scores = {signal["id"]: float(
+        signal["score"]) for signal in signals}
     adjusted_signal_scores = {
-        signal["id"]: _shrink_toward_neutral(float(signal["score"]), signal["evidence_level"])
+        signal["id"]: _shrink_toward_neutral(
+            float(signal["score"]), signal["evidence_level"])
         for signal in signals
     }
     secondary_composite = _clip_score(
@@ -331,8 +338,8 @@ def consumer_signal_dashboard(
                 # LAST_REVIEWED: 2026-03-21
                 "downside_risk": _CONSUMER_W.downside_risk,
             },
-        )
-        + _risk_buffer(risk_tolerance)
+        ) +
+        _risk_buffer(risk_tolerance)
     )
 
     if payment_ratio >= 0.45:
@@ -387,8 +394,10 @@ def reit_signal_dashboard(
     #   (scenario signal has wider cross-sectional spread than cycle_signal;
     #   higher sensitivity despite identical blend weight)
     # LAST_REVIEWED: 2026-03-21
-    cycle_outlook = _clip_score(0.65 * cycle_signal + 0.35 * _scenario_signal_score(simulation_percentiles))
-    downside_resilience = _downside_score(simulation_percentiles, downside_prob)
+    cycle_outlook = _clip_score(
+        0.65 * cycle_signal + 0.35 * _scenario_signal_score(simulation_percentiles))
+    downside_resilience = _downside_score(
+        simulation_percentiles, downside_prob)
 
     signals = [
         _signal_card(
@@ -428,9 +437,11 @@ def reit_signal_dashboard(
             note="Relevant for allocation context, but not validated as a complete alpha signal.",
         ),
     ]
-    signal_scores = {signal["id"]: float(signal["score"]) for signal in signals}
+    signal_scores = {signal["id"]: float(
+        signal["score"]) for signal in signals}
     adjusted_signal_scores = {
-        signal["id"]: _shrink_toward_neutral(float(signal["score"]), signal["evidence_level"])
+        signal["id"]: _shrink_toward_neutral(
+            float(signal["score"]), signal["evidence_level"])
         for signal in signals
     }
     secondary_composite = _clip_score(
@@ -471,8 +482,8 @@ def reit_signal_dashboard(
                 # LAST_REVIEWED: 2026-03-21
                 "downside_risk": _REIT_W.downside_risk,
             },
-        )
-        + _risk_buffer(risk_tolerance)
+        ) +
+        _risk_buffer(risk_tolerance)
     )
 
     return {
@@ -562,8 +573,10 @@ def score_consumer(
         income,
         deposit,
         simulation_percentiles,
-        valuation_signal=float(base_model_score if base_model_score is not None else simulation_percentiles.get("base_model_score", 50.0)),
-        cycle_signal=float(base_model_score if base_model_score is not None else simulation_percentiles.get("base_model_score", 50.0)),
+        valuation_signal=float(base_model_score if base_model_score is not None else simulation_percentiles.get(
+            "base_model_score", 50.0)),
+        cycle_signal=float(base_model_score if base_model_score is not None else simulation_percentiles.get(
+            "base_model_score", 50.0)),
         property_price=property_price,
         mortgage_rate=mortgage_rate,
         mortgage_term_years=mortgage_term_years,
@@ -602,8 +615,10 @@ def score_reit(
         region,
         gross_yield,
         simulation_percentiles,
-        valuation_signal=float(base_model_score if base_model_score is not None else simulation_percentiles.get("base_model_score", 50.0)),
-        cycle_signal=float(base_model_score if base_model_score is not None else simulation_percentiles.get("base_model_score", 50.0)),
+        valuation_signal=float(base_model_score if base_model_score is not None else simulation_percentiles.get(
+            "base_model_score", 50.0)),
+        cycle_signal=float(base_model_score if base_model_score is not None else simulation_percentiles.get(
+            "base_model_score", 50.0)),
         target_yield=target_yield,
         risk_tolerance=risk_tolerance,
         downside_prob=downside_prob,

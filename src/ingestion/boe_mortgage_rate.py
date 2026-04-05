@@ -40,9 +40,9 @@ _BANKSTATS_ZIP_URL = (
 
 # Within the ZIP: TabG1.3.xls contains "Average quoted household interest rates"
 # IUMBV34 = 2yr Fixed, 75% LTV, Owner Occupied (column index 5, 0-based)
-_BANKSTATS_FILE    = "Latest Tables/TabG1.3.xls"
-_IUMBV34_COL_IDX   = 5    # column in TabG1.3 for 2yr Fixed 75% LTV rate
-_DATE_COL_IDX      = 1    # column in TabG1.3 for the date
+_BANKSTATS_FILE = "Latest Tables/TabG1.3.xls"
+_IUMBV34_COL_IDX = 5    # column in TabG1.3 for 2yr Fixed 75% LTV rate
+_DATE_COL_IDX = 1    # column in TabG1.3 for the date
 
 
 def fetch_boe_mortgage_rate(save: bool = True) -> pd.DataFrame:
@@ -77,14 +77,15 @@ def fetch_boe_mortgage_rate(save: bool = True) -> pd.DataFrame:
     # Splice: proxy for full history, real data overwrites where available
     if real is not None and not real.empty:
         proxy = proxy[~proxy["date"].isin(real["date"])]
-        df = pd.concat([proxy, real[["date", "mortgage_rate", "source"]]], ignore_index=True)
+        df = pd.concat(
+            [proxy, real[["date", "mortgage_rate", "source"]]], ignore_index=True)
     else:
         df = proxy
 
     df = df.sort_values("date").reset_index(drop=True)
     df = df[df["date"].dt.year >= 2000].reset_index(drop=True)
 
-    n_real  = (df["source"] == "bankstats").sum()
+    n_real = (df["source"] == "bankstats").sum()
     n_proxy = (df["source"] == "proxy").sum()
     print(f"  Series: {n_real} real + {n_proxy} proxy months")
 
@@ -130,7 +131,8 @@ def _fetch_bankstats_mortgage_rate() -> pd.DataFrame:
         # Search for BV34 dynamically if column shifts
         bv34_cols = [i for i, v in enumerate(code_row) if "BV34" in str(v)]
         if not bv34_cols:
-            raise ValueError(f"BV34 column not found in row 10. Got: {code_row.tolist()[:10]}")
+            raise ValueError(
+                f"BV34 column not found in row 10. Got: {code_row.tolist()[:10]}")
         col_idx = bv34_cols[0]
     else:
         col_idx = _IUMBV34_COL_IDX
@@ -143,7 +145,7 @@ def _fetch_bankstats_mortgage_rate() -> pd.DataFrame:
         if pd.isna(date_val) or isinstance(date_val, str):
             continue
         try:
-            ts   = pd.Timestamp(date_val)
+            ts = pd.Timestamp(date_val)
             rate = float(str(rate_val).replace(",", "").strip())
             if not pd.isna(rate):
                 records.append({"date": ts, "mortgage_rate": rate})
@@ -182,9 +184,12 @@ def _base_rate_proxy() -> pd.DataFrame:
 
     def _spread(date: pd.Timestamp) -> float:
         year = date.year
-        if year <= 2007: return 1.2
-        if year <= 2012: return 3.0
-        if year <= 2021: return 1.8
+        if year <= 2007:
+            return 1.2
+        if year <= 2012:
+            return 3.0
+        if year <= 2021:
+            return 1.8
         return 1.3
 
     base["mortgage_rate"] = base["base_rate"] + base["date"].map(_spread)

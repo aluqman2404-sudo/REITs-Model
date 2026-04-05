@@ -10,7 +10,8 @@ from src.core.config import load_config
 def ensure_state_defaults() -> None:
     """Populate session state with stable defaults."""
     config = load_config()
-    default_preset = "Baseline" if "Baseline" in config.ui.scenario_labels else config.ui.scenario_labels[0]
+    default_preset = "Baseline" if "Baseline" in config.ui.scenario_labels else config.ui.scenario_labels[
+        0]
     defaults = {
         "scenario_lab_region": config.ui.default_region,
         "scenario_lab_preset": default_preset,
@@ -29,7 +30,8 @@ def ensure_state_defaults() -> None:
 def reset_override_state() -> None:
     """Reset Scenario Lab / controls overrides to defaults."""
     config = load_config()
-    default_preset = "Baseline" if "Baseline" in config.ui.scenario_labels else config.ui.scenario_labels[0]
+    default_preset = "Baseline" if "Baseline" in config.ui.scenario_labels else config.ui.scenario_labels[
+        0]
     st.session_state["scenario_lab_preset"] = default_preset
     st.session_state["override_rate_shift_bps"] = 0.0
     st.session_state["override_sigma_multiplier"] = 1.0

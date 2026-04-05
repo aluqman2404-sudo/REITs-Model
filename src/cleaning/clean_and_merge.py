@@ -36,16 +36,16 @@ warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parents[2]
-RAW  = ROOT / "data" / "raw"
+RAW = ROOT / "data" / "raw"
 PROC = ROOT / "data" / "processed"
 PROC.mkdir(parents=True, exist_ok=True)
 
 # ── Model parameters ──────────────────────────────────────────────────────────
-MODEL_START   = pd.Timestamp("2005-01-01")
+MODEL_START = pd.Timestamp("2005-01-01")
 # Extended 2026-03-31: LR HPI covers 2026-01-01. Transactions/approvals/
 # unemployment forward-filled 3 months from 2025-10-01. Governance: 6-month forward-fill
 # limit per INTERPOLATED_FEATURE_POLICY.md. Triggers test_data_freshness threshold reset.
-MODEL_END     = pd.Timestamp("2026-01-01")
+MODEL_END = pd.Timestamp("2026-01-01")
 CPI_BASE_DATE = pd.Timestamp("2015-01-01")
 
 # 253 monthly periods: Jan 2005 → Jan 2026
@@ -66,7 +66,7 @@ _LOG: list[str] = []
 
 def _log(msg: str = "") -> None:
     """Append timestamped message to the cleaning log and print it."""
-    ts   = datetime.now().strftime("%H:%M:%S")
+    ts = datetime.now().strftime("%H:%M:%S")
     line = f"[{ts}] {msg}" if msg else ""
     _LOG.append(line)
     print(line)
@@ -101,22 +101,25 @@ def _check_flow_series_staleness() -> None:
     """
     flow_specs = [
         ("transactions",       "hmrc_transactions*.csv"),
-        ("mortgage_approvals", "boe_mortgage_approvals.csv"),  # exact name avoids matching _raw.csv
+        # exact name avoids matching _raw.csv
+        ("mortgage_approvals", "boe_mortgage_approvals.csv"),
         ("unemployment",       "ons_regional_unemployment*.csv"),
     ]
     for series_name, pattern in flow_specs:
         try:
             path = _find_raw(pattern)
             raw = pd.read_csv(path)
-            date_col = next((c for c in raw.columns if c.lower() == "date"), None)
+            date_col = next(
+                (c for c in raw.columns if c.lower() == "date"), None)
             if date_col is None:
-                _log(f"  WARNING: no date column in {path.name} — skipping staleness check for {series_name}")
+                _log(
+                    f"  WARNING: no date column in {path.name} — skipping staleness check for {series_name}")
                 continue
             raw[date_col] = pd.to_datetime(raw[date_col], errors="coerce")
             last_obs = raw[date_col].max()
             n_months = (
-                (MODEL_END.year - last_obs.year) * 12
-                + (MODEL_END.month - last_obs.month)
+                (MODEL_END.year - last_obs.year) * 12 +
+                (MODEL_END.month - last_obs.month)
             )
             if n_months > 0:
                 _log(
@@ -202,14 +205,14 @@ def step1_load_and_standardise() -> dict[str, pd.DataFrame]:
     dfs = {}
     for key, (pattern, want_cols) in file_specs.items():
         path = _find_raw(pattern)
-        raw  = pd.read_csv(path)
+        raw = pd.read_csv(path)
 
         _log(f"  Loaded {path.name}  ({len(raw):,} rows)")
         _log(f"    Columns in file: {list(raw.columns)}")
 
         # Keep only required columns that actually exist in this file
         keep = [c for c in want_cols if c in raw.columns]
-        raw  = raw[keep].copy()
+        raw = raw[keep].copy()
 
         # Standardise date
         raw = _to_month_start(raw, "date")
@@ -264,8 +267,9 @@ def step2_merge_supply(dfs: dict) -> pd.DataFrame:
     )
 
     n_reg = combined["region"].nunique()
-    n_yr  = combined["date"].nunique()
-    _log(f"  Combined: {len(combined)} rows | {n_reg} regions | {n_yr} annual dates")
+    n_yr = combined["date"].nunique()
+    _log(
+        f"  Combined: {len(combined)} rows | {n_reg} regions | {n_yr} annual dates")
 
     # Warn if expected 300 rows not met
     if len(combined) != 300:
@@ -273,7 +277,7 @@ def step2_merge_supply(dfs: dict) -> pd.DataFrame:
 
     path = PROC / "supply_combined.csv"
     combined.to_csv(path, index=False)
-    _log(f"  Saved → supply_combined.csv")
+    _log("  Saved → supply_combined.csv")
 
     return combined
 
@@ -307,7 +311,8 @@ def _interpolate_annual_to_monthly(
         sub = df[df["region"] == region][["date", value_col]].copy()
 
         if sub.empty:
-            _log(f"    WARNING: no '{label}' data for region '{region}' — filling NaN")
+            _log(
+                f"    WARNING: no '{label}' data for region '{region}' — filling NaN")
             frames.append(pd.DataFrame({
                 "date":    MONTHLY_IDX,
                 "region":  region,
@@ -318,13 +323,13 @@ def _interpolate_annual_to_monthly(
         # Deduplicate and sort by date
         series = (
             sub.drop_duplicates("date")
-               .set_index("date")
-               .sort_index()[value_col]
+            .set_index("date")
+            .sort_index()[value_col]
         )
 
         # Union of known anchor dates and monthly target index
         all_dates = series.index.union(MONTHLY_IDX)
-        series    = series.reindex(all_dates)
+        series = series.reindex(all_dates)
 
         # Linear interpolation across calendar time between anchors
         series = series.interpolate(method="time")
@@ -365,7 +370,8 @@ def step3_interpolate_annual(dfs: dict, supply_combined: pd.DataFrame) -> dict:
         supply_combined, "net_additions", "supply"
     )
     # Rename to final column name
-    supply_m = supply_m.rename(columns={"net_additions": "net_additions_monthly"})
+    supply_m = supply_m.rename(
+        columns={"net_additions": "net_additions_monthly"})
     n_null = supply_m["net_additions_monthly"].isna().sum()
     _log(f"    {before} annual rows → {len(supply_m):,} monthly rows | {n_null} NaN")
     dfs["supply_monthly"] = supply_m
@@ -425,9 +431,11 @@ def step4_cpi_deflation(dfs: dict) -> dict:
         cpi_base = float(cpi_series.loc[CPI_BASE_DATE])
     else:
         # Fall back to nearest available date
-        nearest  = cpi_series.index[abs(cpi_series.index - CPI_BASE_DATE).argmin()]
+        nearest = cpi_series.index[abs(
+            cpi_series.index - CPI_BASE_DATE).argmin()]
         cpi_base = float(cpi_series.loc[nearest])
-        _log(f"  WARNING: 2015-01-01 not in CPI. Using nearest: {nearest.date()}")
+        _log(
+            f"  WARNING: 2015-01-01 not in CPI. Using nearest: {nearest.date()}")
 
     _log(f"  CPI base value at 2015-01-01 = {cpi_base:.4f}")
     _log(f"  >>> Record in dissertation: CPI_base = {cpi_base:.4f} <<<")
@@ -438,7 +446,8 @@ def step4_cpi_deflation(dfs: dict) -> dict:
         df["_cpi_t"] = df["date"].map(cpi_series)
         n_miss = df["_cpi_t"].isna().sum()
         if n_miss:
-            _log(f"    WARNING: {n_miss} rows missing CPI match — forward-filling")
+            _log(
+                f"    WARNING: {n_miss} rows missing CPI match — forward-filling")
             df["_cpi_t"] = df["_cpi_t"].ffill().bfill()
         # Deflation: nominal / (cpi_t / cpi_base)
         df[real_col] = df[nominal_col] / (df["_cpi_t"] / cpi_base)
@@ -469,7 +478,8 @@ def step4_cpi_deflation(dfs: dict) -> dict:
 
     # --- Monthly rents (filter to model window) ---
     rents = dfs["rent_levels"].copy()
-    rents = rents[(rents["date"] >= MODEL_START) & (rents["date"] <= MODEL_END)].copy()
+    rents = rents[(rents["date"] >= MODEL_START) &
+                  (rents["date"] <= MODEL_END)].copy()
     rents = _deflate(rents, "median_monthly_rent", "real_monthly_rent")
     _log(f"  Rents deflated: {len(rents):,} rows")
     dfs["rents_real"] = rents
@@ -501,8 +511,9 @@ def step5_derive_pti(dfs: dict) -> dict:
     _log("STEP 5 — Deriving price-to-income ratio")
     _log("=" * 60)
 
-    hpi  = dfs["hpi_clean"][["date", "region", "real_house_price"]].copy()
-    earn = dfs["earnings_real"][["date", "region", "real_annual_earnings"]].copy()
+    hpi = dfs["hpi_clean"][["date", "region", "real_house_price"]].copy()
+    earn = dfs["earnings_real"][[
+        "date", "region", "real_annual_earnings"]].copy()
 
     merged = hpi.merge(earn, on=["date", "region"], how="inner")
 
@@ -517,7 +528,8 @@ def step5_derive_pti(dfs: dict) -> dict:
 
     # Print min/max per region so any outliers are visible immediately
     _log("  PTI range by region (annual income multiples):")
-    stats = merged.groupby("region")["price_to_income_ratio_derived"].agg(["min", "max", "mean"])
+    stats = merged.groupby("region")["price_to_income_ratio_derived"].agg(
+        ["min", "max", "mean"])
     for region, row in stats.iterrows():
         _log(f"    {region:<35}  "
              f"min={row['min']:.1f}  max={row['max']:.1f}  mean={row['mean']:.1f}")
@@ -557,10 +569,11 @@ def _expand_to_monthly(
             }))
             continue
 
-        series    = sub.drop_duplicates("date").set_index("date").sort_index()[value_col]
+        series = sub.drop_duplicates("date").set_index(
+            "date").sort_index()[value_col]
         all_dates = series.index.union(MONTHLY_IDX)
-        series    = series.reindex(all_dates).ffill().bfill()
-        series    = series.reindex(MONTHLY_IDX)
+        series = series.reindex(all_dates).ffill().bfill()
+        series = series.reindex(MONTHLY_IDX)
 
         frames.append(pd.DataFrame({
             "date":    MONTHLY_IDX,
@@ -596,7 +609,8 @@ def step6_build_master(dfs: dict) -> pd.DataFrame:
     _log("=" * 60)
 
     # ── Base: HPI already filtered to model window in Step 4 ──────────────────
-    _base_cols = ["date", "region", "nominal_house_price", "real_house_price", "hpi_index"]
+    _base_cols = ["date", "region", "nominal_house_price",
+                  "real_house_price", "hpi_index"]
     _avail = [c for c in _base_cols if c in dfs["hpi_clean"].columns]
     master = dfs["hpi_clean"][_avail].copy()
     _log(f"  Base (LR HPI):  {len(master):,} rows | "
@@ -610,7 +624,7 @@ def step6_build_master(dfs: dict) -> pd.DataFrame:
         """Left-join right onto master and log null count for new column(s)."""
         nonlocal master
         new_cols = [c for c in right.columns if c not in keys]
-        master   = master.merge(right.drop_duplicates(keys), on=keys, how="left")
+        master = master.merge(right.drop_duplicates(keys), on=keys, how="left")
         for col in new_cols:
             n = master[col].isna().sum()
             _log(f"    {label:<32}  {col}: {n} NaN")
@@ -648,7 +662,8 @@ def step6_build_master(dfs: dict) -> pd.DataFrame:
     # ── Rental yield: quarterly → forward-filled monthly ─────────────────────
     yield_monthly = _expand_to_monthly(dfs["yield"], "gross_yield_pct")
     yield_monthly = yield_monthly[
-        (yield_monthly["date"] >= MODEL_START) & (yield_monthly["date"] <= MODEL_END)
+        (yield_monthly["date"] >= MODEL_START) & (
+            yield_monthly["date"] <= MODEL_END)
     ]
     _join(yield_monthly, ["date", "region"], "Gross yield")
 
@@ -725,9 +740,9 @@ def step7_quality_checks(master: pd.DataFrame) -> str:
 
     # ── Shape check ───────────────────────────────────────────────────────────
     p()
-    p(f"SHAPE CHECK")
+    p("SHAPE CHECK")
     p(f"  Actual:   {master.shape}")
-    p(f"  Expected: (2892, 16)  [12 regions × 241 months × 16 columns]")
+    p("  Expected: (2892, 16)  [12 regions × 241 months × 16 columns]")
     if master.shape == (2892, 16):
         p("  Result:   PASS")
     else:
@@ -739,7 +754,7 @@ def step7_quality_checks(master: pd.DataFrame) -> str:
     p()
     p("DATE RANGE CHECK")
     actual_start = master["date"].min()
-    actual_end   = master["date"].max()
+    actual_end = master["date"].max()
     p(f"  Actual:   {actual_start.date()} → {actual_end.date()}")
     p(f"  Expected: {MODEL_START.date()} → {MODEL_END.date()}")
     if actual_start == MODEL_START and actual_end == MODEL_END:
@@ -773,7 +788,7 @@ def step7_quality_checks(master: pd.DataFrame) -> str:
     total = len(master)
     any_warn = False
     for col in master.columns:
-        n   = master[col].isna().sum()
+        n = master[col].isna().sum()
         pct = n / total * 100
         warn = "  *** WARNING > 5% missing ***" if pct > 5 else ""
         if pct > 5:
@@ -786,19 +801,20 @@ def step7_quality_checks(master: pd.DataFrame) -> str:
     p()
     p("DERIVED vs OFFICIAL PRICE-TO-INCOME RATIO")
     valid = master.dropna(
-        subset=["price_to_income_ratio_derived", "price_to_income_ratio_official"]
+        subset=["price_to_income_ratio_derived",
+                "price_to_income_ratio_official"]
     )
     if len(valid) >= 10:
         corr = valid["price_to_income_ratio_derived"].corr(
             valid["price_to_income_ratio_official"]
         )
         mad = (
-            valid["price_to_income_ratio_derived"]
-            - valid["price_to_income_ratio_official"]
+            valid["price_to_income_ratio_derived"] -
+            valid["price_to_income_ratio_official"]
         ).abs().mean()
         bias = (
-            valid["price_to_income_ratio_derived"]
-            - valid["price_to_income_ratio_official"]
+            valid["price_to_income_ratio_derived"] -
+            valid["price_to_income_ratio_official"]
         ).mean()
         p(f"  Valid paired observations:  {len(valid):,}")
         p(f"  Pearson correlation:        {corr:.4f}")
@@ -867,7 +883,8 @@ def step7_quality_checks(master: pd.DataFrame) -> str:
         p(f"  {col}:")
         p(f"    {'Region':<35}  {'Min':>10}  {'Max':>10}  {'Mean':>10}  {'Std':>8}")
         p(f"    {'-'*35}  {'-'*10}  {'-'*10}  {'-'*10}  {'-'*8}")
-        stats = master.groupby("region")[col].agg(["min", "max", "mean", "std"])
+        stats = master.groupby("region")[col].agg(
+            ["min", "max", "mean", "std"])
         for region, row in stats.iterrows():
             p(f"    {region:<35}  {row['min']:>10.2f}  {row['max']:>10.2f}  "
               f"{row['mean']:>10.2f}  {row['std']:>8.2f}")
@@ -899,17 +916,18 @@ def step8_save_outputs(master: pd.DataFrame, quality_report: str) -> None:
     # Master dataset
     path_master = PROC / "master_dataset.csv"
     master.to_csv(path_master, index=False)
-    _log(f"  Saved master_dataset.csv  ({len(master):,} rows × {len(master.columns)} cols)")
+    _log(
+        f"  Saved master_dataset.csv  ({len(master):,} rows × {len(master.columns)} cols)")
 
     # Data quality report
     path_qr = PROC / "data_quality_report.txt"
     path_qr.write_text(quality_report, encoding="utf-8")
-    _log(f"  Saved data_quality_report.txt")
+    _log("  Saved data_quality_report.txt")
 
     # Cleaning log (append the final save entries too before writing)
     path_log = PROC / "cleaning_log.txt"
     path_log.write_text("\n".join(_LOG), encoding="utf-8")
-    _log(f"  Saved cleaning_log.txt")
+    _log("  Saved cleaning_log.txt")
 
     # ── Final printed summary ─────────────────────────────────────────────────
     _log("")
@@ -918,7 +936,8 @@ def step8_save_outputs(master: pd.DataFrame, quality_report: str) -> None:
     _log("=" * 60)
     _log(f"  Rows:        {len(master):,}")
     _log(f"  Columns:     {len(master.columns)}  {list(master.columns)}")
-    _log(f"  Date range:  {master['date'].min().date()} → {master['date'].max().date()}")
+    _log(
+        f"  Date range:  {master['date'].min().date()} → {master['date'].max().date()}")
     _log(f"  Regions:     {sorted(master['region'].unique())}")
 
     null_counts = master.isna().sum()

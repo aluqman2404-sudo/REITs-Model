@@ -53,10 +53,13 @@ def run_monte_carlo(
         raise ValueError("n_months and n_paths must be positive")
 
     dt = float(params.get("dt", config.model.dt))
-    kappa = float(params.get("kappa", config.model.mean_reversion_theta or 0.12))
+    kappa = float(params.get(
+        "kappa", config.model.mean_reversion_theta or 0.12))
     sigma = float(params.get("sigma", config.model.diffusion_sigma or 0.08))
-    drift_annual = float(params.get("drift_annual", params.get("gamma_annual", config.model.drift_mu or 0.0)))
-    long_run_mean = params.get("long_run_mean", params.get("mu_equilibrium", start_price))
+    drift_annual = float(params.get("drift_annual", params.get(
+        "gamma_annual", config.model.drift_mu or 0.0)))
+    long_run_mean = params.get(
+        "long_run_mean", params.get("mu_equilibrium", start_price))
     mean_path = _coerce_mean_path(long_run_mean, n_months)
 
     rng = np.random.default_rng(seed)
@@ -70,10 +73,10 @@ def run_monte_carlo(
         current_log_price = log_paths[month - 1, :]
         target_log_price = np.log(np.maximum(mean_path[month], 1.0))
         log_paths[month, :] = (
-            current_log_price
-            + kappa * (target_log_price - current_log_price) * dt
-            + drift_step
-            + sigma_step * shocks[month - 1, :]
+            current_log_price +
+            kappa * (target_log_price - current_log_price) * dt +
+            drift_step +
+            sigma_step * shocks[month - 1, :]
         )
 
     prices = np.exp(log_paths)
@@ -88,6 +91,7 @@ def summarize_paths(
 ) -> pd.DataFrame:
     """Return per-month percentiles and mean across simulation paths."""
     pct_values = np.percentile(paths.to_numpy(), list(percentiles), axis=1).T
-    summary = pd.DataFrame(pct_values, index=paths.index, columns=[f"p{p}" for p in percentiles])
+    summary = pd.DataFrame(pct_values, index=paths.index, columns=[
+                           f"p{p}" for p in percentiles])
     summary["mean"] = paths.mean(axis=1).values
     return summary

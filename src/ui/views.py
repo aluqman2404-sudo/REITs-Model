@@ -107,29 +107,40 @@ def _scenario_parameters(
     scenario = config.scenarios[scenario_name]
 
     start_price = float(region_row["nominal_house_price"])
-    current_rate = float(region_row.get("r_current", region_row.get("mortgage_rate", 5.25)))
-    target_rate = max(0.5, current_rate + (scenario.rate_shift_bps + rate_shift_bps) / 100.0)
-    rate_channel_mode = str(region_row.get("rate_channel_mode", "rate_level_anchor"))
+    current_rate = float(region_row.get(
+        "r_current", region_row.get("mortgage_rate", 5.25)))
+    target_rate = max(0.5, current_rate +
+                      (scenario.rate_shift_bps + rate_shift_bps) / 100.0)
+    rate_channel_mode = str(region_row.get(
+        "rate_channel_mode", "rate_level_anchor"))
     alpha = float(region_row.get("alpha_used", 0.5))
     r_bar = float(region_row.get("r_bar", 3.54))
-    p_star_base = float(region_row.get("P_star_base", region_row.get("mu_equilibrium", start_price)))
+    p_star_base = float(region_row.get(
+        "P_star_base", region_row.get("mu_equilibrium", start_price)))
     current_fair_value = float(region_row.get("P_star_now", p_star_base))
     if rate_channel_mode in {"rate_change_plus_stress", "rate_change_plus_aux_stress", "rate_gap_plus_aux_stress"}:
         gap_current = float(region_row.get("valuation_gap_current", 0.0))
         gap_closure = VALUATION_GAP_CLOSURE_UI.get(scenario_name, 0.15)
         target_fair_value = start_price * np.exp(-gap_closure * gap_current)
-        target_fair_value *= 1.0 + scenario.income_growth_shift_pct / 150.0 - scenario.supply_shift_pct / 400.0
+        target_fair_value *= 1.0 + scenario.income_growth_shift_pct / \
+            150.0 - scenario.supply_shift_pct / 400.0
     else:
         target_fair_value = p_star_base * (r_bar / target_rate) ** alpha
-        target_fair_value *= 1.0 + scenario.income_growth_shift_pct / 100.0 - scenario.supply_shift_pct / 200.0
+        target_fair_value *= 1.0 + scenario.income_growth_shift_pct / \
+            100.0 - scenario.supply_shift_pct / 200.0
     if stage5_row is not None and "median_5yr_growth" in stage5_row:
-        stage5_terminal = start_price * (1.0 + float(stage5_row["median_5yr_growth"]) / 100.0)
+        stage5_terminal = start_price * \
+            (1.0 + float(stage5_row["median_5yr_growth"]) / 100.0)
         if np.isfinite(stage5_terminal) and stage5_terminal > 0:
-            blend = 0.65 if rate_channel_mode in {"rate_change_plus_stress", "rate_change_plus_aux_stress", "rate_gap_plus_aux_stress"} else 0.50
-            target_fair_value = (1.0 - blend) * target_fair_value + blend * stage5_terminal
-    target_fair_value = max(start_price * config.controls.minimum_price_floor_ratio, target_fair_value)
+            blend = 0.65 if rate_channel_mode in {
+                "rate_change_plus_stress", "rate_change_plus_aux_stress", "rate_gap_plus_aux_stress"} else 0.50
+            target_fair_value = (1.0 - blend) * \
+                target_fair_value + blend * stage5_terminal
+    target_fair_value = max(
+        start_price * config.controls.minimum_price_floor_ratio, target_fair_value)
 
-    drift_annual = float(region_row.get("gamma_annual", region_row.get("gamma_annual_pp", 0.0)))
+    drift_annual = float(region_row.get(
+        "gamma_annual", region_row.get("gamma_annual_pp", 0.0)))
     if abs(drift_annual) > 1.0:
         drift_annual /= 100.0
     drift_annual += (scenario.drift_shift_pct + drift_shift_pct) / 100.0
@@ -142,14 +153,18 @@ def _scenario_parameters(
     else:
         stage4_sigma_monthly = stage4_sigma_raw
         stage4_sigma_annual = stage4_sigma_monthly * np.sqrt(12.0)
-    hist_vol_annual = float(region_row.get("hist_price_growth_vol_annual", stage4_sigma_annual))
+    hist_vol_annual = float(region_row.get(
+        "hist_price_growth_vol_annual", stage4_sigma_annual))
     if not np.isfinite(hist_vol_annual) or hist_vol_annual <= 0:
         hist_vol_annual = stage4_sigma_annual
-    sigma_implied_annual = _implied_annual_sigma_from_stage5(stage5_row, horizon_years, hist_vol_annual)
-    sigma_annual = max(stage4_sigma_annual, 0.5 * (hist_vol_annual + sigma_implied_annual))
+    sigma_implied_annual = _implied_annual_sigma_from_stage5(
+        stage5_row, horizon_years, hist_vol_annual)
+    sigma_annual = max(stage4_sigma_annual, 0.5 *
+                       (hist_vol_annual + sigma_implied_annual))
 
     horizon_months = int(horizon_years * 12)
-    mean_path = np.linspace(current_fair_value, target_fair_value, horizon_months + 1)
+    mean_path = np.linspace(
+        current_fair_value, target_fair_value, horizon_months + 1)
     params = {
         "kappa": float(region_row.get("kappa", 0.12)),
         "sigma": max(0.0001, sigma_annual * scenario.volatility_multiplier * sigma_multiplier),
@@ -220,7 +235,8 @@ def _signal_confidence_summary(signals: list[dict]) -> str:
 def _render_research_header(data, *, compact: bool = False) -> None:
     model_start = pd.to_datetime(data.metadata["data_coverage_start"]).year
     model_end = pd.to_datetime(data.metadata["model_panel_coverage_end"]).year
-    descriptive_end = pd.to_datetime(data.metadata["latest_market_data_end"]).year
+    descriptive_end = pd.to_datetime(
+        data.metadata["latest_market_data_end"]).year
     st.markdown("### Housing Market Research Dashboard")
     st.caption(
         "Model estimated on the harmonised panel. Newer descriptive market data are shown separately and are not used for Stage 4 estimation."
@@ -228,7 +244,8 @@ def _render_research_header(data, *, compact: bool = False) -> None:
     cols = st.columns(3)
     cols[0].metric("Model coverage window", f"{model_start}-{model_end}")
     cols[1].metric("Latest market data available", f"{descriptive_end}")
-    cols[2].metric("Last pipeline rebuild", data.metadata["latest_model_run_utc"][:10])
+    cols[2].metric("Last pipeline rebuild",
+                   data.metadata["latest_model_run_utc"][:10])
     if not compact:
         st.caption(
             f"Latest descriptive housing context: house prices through {data.metadata.get('latest_house_price_end', 'n/a')} "
@@ -256,7 +273,8 @@ def _signal_display_value(signal: dict, region_row: dict | None = None) -> str:
                 return "Cooling vs history"
             return "Mixed cycle backdrop"
     if signal["id"] in {"downside", "downside_vulnerability"}:
-        pct = float(region_row.get("downside_vulnerability_percentile", np.nan))
+        pct = float(region_row.get(
+            "downside_vulnerability_percentile", np.nan))
         if np.isfinite(pct):
             if pct >= 75:
                 return "Top quartile vulnerability"
@@ -278,7 +296,8 @@ def _render_signal_dashboard(signals: list[dict], *, region_row: dict | None = N
     st.caption(_signal_confidence_summary(signals))
     cols = st.columns(len(signals))
     for idx, signal in enumerate(signals):
-        cols[idx].metric(signal["display_name"], _signal_display_value(signal, region_row))
+        cols[idx].metric(signal["display_name"],
+                         _signal_display_value(signal, region_row))
         cols[idx].markdown(
             f"{render_badge(signal['bucket'])} {render_evidence_badge(signal['evidence_level'])}",
             unsafe_allow_html=True,
@@ -312,8 +331,10 @@ def _signal_evidence_table(signals: list[dict]) -> pd.DataFrame:
 
 def _headline_insight(region: str, dashboard: dict, *, institutional: bool = False) -> str:
     positives, negatives = top_signal_contributors(dashboard["signals"])
-    valuation = next(signal for signal in dashboard["signals"] if signal["id"] == "valuation")
-    cycle = next(signal for signal in dashboard["signals"] if signal["id"] == "cycle")
+    valuation = next(
+        signal for signal in dashboard["signals"] if signal["id"] == "valuation")
+    cycle = next(
+        signal for signal in dashboard["signals"] if signal["id"] == "cycle")
     framing = "institutional" if institutional else "household"
     return (
         f"{region}: valuation is {_direction_label(valuation['bucket']).lower()} while cycle conditions are "
@@ -323,8 +344,10 @@ def _headline_insight(region: str, dashboard: dict, *, institutional: bool = Fal
 
 
 def _regional_house_view_summary(data, region_row: dict, dashboard: dict) -> str:
-    valuation_pct = float(region_row.get("valuation_stretch_percentile", np.nan))
-    downside_pct = float(region_row.get("downside_vulnerability_percentile", np.nan))
+    valuation_pct = float(region_row.get(
+        "valuation_stretch_percentile", np.nan))
+    downside_pct = float(region_row.get(
+        "downside_vulnerability_percentile", np.nan))
     cycle_pct = float(region_row.get("cycle_strength_percentile", np.nan))
     valuation_read = (
         "stretched versus local history"
@@ -359,7 +382,8 @@ def _topline_market_read(data) -> str:
     stretched = int((table["valuation_stretch_percentile"] >= 75).sum())
     supportive = int((table["valuation_stretch_percentile"] <= 25).sum())
     vulnerable = int((table["downside_vulnerability_percentile"] >= 75).sum())
-    latest_context = data.metadata.get("latest_complete_housing_context_end", data.metadata.get("latest_market_data_end", "n/a"))
+    latest_context = data.metadata.get(
+        "latest_complete_housing_context_end", data.metadata.get("latest_market_data_end", "n/a"))
     return (
         f"House view summary: valuation still looks stretched in {stretched} of {len(table)} regions, while {supportive} regions look relatively more supportive versus their own history. "
         f"Downside vulnerability is elevated in {vulnerable} regions on the current baseline scenario read. "
@@ -399,7 +423,8 @@ def _render_validation_status(data, *, compact: bool = False) -> None:
     zero_rmse = benchmarks.get("zero", {}).get("rmse")
     ar1_rmse = benchmarks.get("ar1", {}).get("rmse")
     all_stable = bool(rate_stability.get("all_regions_stable", False))
-    flagged_regions = int(rate_stability.get("flagged_unstable_regions", 0) or 0)
+    flagged_regions = int(rate_stability.get(
+        "flagged_unstable_regions", 0) or 0)
     rate_text = (
         f"{flagged_regions} flagged unstable regions"
         if flagged_regions
@@ -431,7 +456,8 @@ def _render_validation_status(data, *, compact: bool = False) -> None:
     )
     metric_cols[1].metric(
         "1m directional accuracy",
-        f"{subsample['directional_1m']:.1%}" if subsample.get("directional_1m") is not None else "n/a",
+        f"{subsample['directional_1m']:.1%}" if subsample.get(
+            "directional_1m") is not None else "n/a",
     )
     metric_cols[2].metric(
         "Model RMSE",
@@ -467,7 +493,8 @@ def _render_validation_status(data, *, compact: bool = False) -> None:
             }
         )
     if benchmark_rows:
-        st.dataframe(pd.DataFrame(benchmark_rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(benchmark_rows),
+                     use_container_width=True, hide_index=True)
         st.caption(
             "The model currently outperforms AR(1) on RMSE and MAE, while zero-growth remains the toughest benchmark in the post-rate-shock holdout."
         )
@@ -475,7 +502,8 @@ def _render_validation_status(data, *, compact: bool = False) -> None:
 
 def _render_everyday_summary(region: str, dashboard: dict) -> None:
     st.markdown("#### In Plain English")
-    st.caption(f"A simple summary for {region}. This does not replace the research signals below.")
+    st.caption(
+        f"A simple summary for {region}. This does not replace the research signals below.")
     for takeaway in plain_signal_takeaways(dashboard["signals"]):
         st.markdown(f"- {takeaway}")
 
@@ -489,19 +517,27 @@ def _render_simulation_transparency(region: str) -> None:
     )
     table = pd.DataFrame(
         [
-            ("Historical mean 5y return", f"{moments['historical_mean_pct']:.1f}%"),
-            ("Historical median 5y return", f"{moments['historical_median_pct']:.1f}%"),
-            ("Simulated median 5y return", f"{moments['simulated_median_pct']:.1f}%"),
-            ("Historical P10 / P90", f"{moments['historical_p10_pct']:.1f}% / {moments['historical_p90_pct']:.1f}%"),
-            ("Simulated P10 / P90", f"{moments['simulated_p10_pct']:.1f}% / {moments['simulated_p90_pct']:.1f}%"),
-            ("Historical P(loss >10%)", f"{moments['historical_prob_loss_10pct']:.0%}"),
-            ("Simulated P(loss >10%)", f"{moments['simulated_prob_loss_10pct']:.0%}"),
+            ("Historical mean 5y return",
+             f"{moments['historical_mean_pct']:.1f}%"),
+            ("Historical median 5y return",
+             f"{moments['historical_median_pct']:.1f}%"),
+            ("Simulated median 5y return",
+             f"{moments['simulated_median_pct']:.1f}%"),
+            ("Historical P10 / P90",
+             f"{moments['historical_p10_pct']:.1f}% / {moments['historical_p90_pct']:.1f}%"),
+            ("Simulated P10 / P90",
+             f"{moments['simulated_p10_pct']:.1f}% / {moments['simulated_p90_pct']:.1f}%"),
+            ("Historical P(loss >10%)",
+             f"{moments['historical_prob_loss_10pct']:.0%}"),
+            ("Simulated P(loss >10%)",
+             f"{moments['simulated_prob_loss_10pct']:.0%}"),
             ("Tail-risk gap", f"{moments['tail_risk_gap']:.2f}"),
         ],
         columns=["Calibration check", "Value"],
     )
     st.dataframe(table, use_container_width=True, hide_index=True)
-    st.caption("Sources: canonical model panel and baseline Stage 5 simulation summary.")
+    st.caption(
+        "Sources: canonical model panel and baseline Stage 5 simulation summary.")
 
 
 def render_home() -> None:
@@ -527,10 +563,13 @@ def render_home() -> None:
     region_summary = get_region_simulation_summary(spotlight_region)
     home_dashboard = regional_market_signal_dashboard(
         spotlight_region,
-        valuation_signal=float(region_row.get("C1_mispricing", region_row["consumer_score"])),
-        cycle_signal=float(region_row.get("C3_regime", region_row.get("C2_reit", region_row["reit_score"]))),
+        valuation_signal=float(region_row.get(
+            "C1_mispricing", region_row["consumer_score"])),
+        cycle_signal=float(region_row.get(
+            "C3_regime", region_row.get("C2_reit", region_row["reit_score"]))),
         downside_prob=float(region_row.get("p_terminal_loss_10_avg", 0.0)),
-        rent_support_signal=float(region_row.get("rent_support_percentile", 50.0)),
+        rent_support_signal=float(region_row.get(
+            "rent_support_percentile", 50.0)),
     )
 
     st.info(_regional_house_view_summary(data, region_row, home_dashboard))
@@ -541,18 +580,24 @@ def render_home() -> None:
         "Model coverage window",
         f"{pd.to_datetime(data.metadata['data_coverage_start']).year}-{pd.to_datetime(data.metadata['model_panel_coverage_end']).year}",
     )
-    snapshot[1].metric("Latest descriptive data", data.metadata.get("latest_market_data_end", "n/a"))
-    snapshot[2].metric("Spotlight house price", format_currency(float(region_row["latest_house_price"])))
-    snapshot[3].metric("Spotlight rent context", format_currency(float(region_row.get("latest_monthly_rent_raw", 0.0))))
+    snapshot[1].metric("Latest descriptive data",
+                       data.metadata.get("latest_market_data_end", "n/a"))
+    snapshot[2].metric("Spotlight house price", format_currency(
+        float(region_row["latest_house_price"])))
+    snapshot[3].metric("Spotlight rent context", format_currency(
+        float(region_row.get("latest_monthly_rent_raw", 0.0))))
     st.caption(
         "The model is estimated on the harmonised panel through the model coverage end date. Later house-price and rent observations are shown here as descriptive context only."
     )
     summary_table = pd.DataFrame(
         [
             ("Spotlight region", spotlight_region),
-            ("Model panel date", str(pd.to_datetime(region_row["date"]).date())),
-            ("Latest raw HPI date", str(pd.to_datetime(region_row["latest_house_price_date"]).date())),
-            ("Current gross yield", format_pct(float(region_row["gross_yield_pct"]), precision=1)),
+            ("Model panel date", str(
+                pd.to_datetime(region_row["date"]).date())),
+            ("Latest raw HPI date", str(pd.to_datetime(
+                region_row["latest_house_price_date"]).date())),
+            ("Current gross yield", format_pct(
+                float(region_row["gross_yield_pct"]), precision=1)),
             ("Research mode", config.ui.historical_mode_label),
         ],
         columns=["Item", "Value"],
@@ -567,8 +612,8 @@ def render_home() -> None:
     try:
         from datetime import date as _date
         _age = (
-            _date.today()
-            - _date.fromisoformat(str(_effective)[:10])
+            _date.today() -
+            _date.fromisoformat(str(_effective)[:10])
         ).days
     except (ValueError, TypeError):
         _age = 0
@@ -590,24 +635,30 @@ def render_home() -> None:
     )
     signal_left, signal_right = st.columns([1.05, 0.95])
     with signal_left:
-        st.pyplot(score_breakdown_chart(_signal_scores_for_chart(home_dashboard["signals"]), f"{spotlight_region}: signal panel"))
-        st.caption("Signal summary by component. Valuation remains the strongest empirically supported indicator in the current framework.")
+        st.pyplot(score_breakdown_chart(_signal_scores_for_chart(
+            home_dashboard["signals"]), f"{spotlight_region}: signal panel"))
+        st.caption(
+            "Signal summary by component. Valuation remains the strongest empirically supported indicator in the current framework.")
     with signal_right:
-        st.dataframe(_signal_evidence_table(home_dashboard["signals"]), use_container_width=True, hide_index=True)
+        st.dataframe(_signal_evidence_table(
+            home_dashboard["signals"]), use_container_width=True, hide_index=True)
 
     st.markdown("### Risk Context")
     risk_left, risk_right = st.columns([1.0, 1.0])
     with risk_left:
         st.pyplot(scenario_comparison_chart(region_summary))
-        st.caption("Scenario range for the spotlight region, showing how medium-term price outcomes vary across the canonical scenario set.")
+        st.caption(
+            "Scenario range for the spotlight region, showing how medium-term price outcomes vary across the canonical scenario set.")
     with risk_right:
         _render_simulation_transparency(spotlight_region)
 
     with st.expander("Cross-regional orientation", expanded=False):
-        st.pyplot(regional_rank_chart(data.region_table, "consumer_score", spotlight_region, "Cross-regional synthesis orientation"))
+        st.pyplot(regional_rank_chart(data.region_table, "consumer_score",
+                  spotlight_region, "Cross-regional synthesis orientation"))
         st.caption("Cross-regional synthesis is shown for orientation only. Primary interpretation should come from the underlying signal panel.")
         st.pyplot(tail_risk_heatmap(data.simulation))
-        st.caption("Scenario downside map based on canonical Stage 5 outputs. This is a scenario-risk summary, not a forecast ranking.")
+        st.caption(
+            "Scenario downside map based on canonical Stage 5 outputs. This is a scenario-risk summary, not a forecast ranking.")
 
     with st.expander("Coverage and source detail", expanded=False):
         display = data.region_table[
@@ -661,7 +712,8 @@ def render_consumer_view() -> None:
     data = load_dashboard_data()
     config = load_config()
     with DEFAULT_CONFIG_PATH.open(encoding="utf-8") as _fh:
-        household_explorer_defaults: dict[str, dict] = json.load(_fh).get("household_explorer_defaults", {})
+        household_explorer_defaults: dict[str, dict] = json.load(
+            _fh).get("household_explorer_defaults", {})
 
     _render_research_header(data, compact=True)
     st.title("Household / Affordability Explorer")
@@ -670,17 +722,27 @@ def render_consumer_view() -> None:
 
     controls, results = st.columns([0.95, 1.05])
     with controls:
-        region = st.selectbox("Region", config.project.regions, index=config.project.regions.index(config.ui.default_region))
+        region = st.selectbox("Region", config.project.regions,
+                              index=config.project.regions.index(config.ui.default_region))
         _region_defaults = household_explorer_defaults.get(region, {})
-        _default_income = _region_defaults.get("household_income", config.ui.default_income_gbp)
-        _default_price = _region_defaults.get("property_price", config.ui.default_property_price_gbp)
-        income = st.number_input("Gross annual household income (GBP)", min_value=15000, max_value=500000, value=_default_income, step=5000)
-        deposit = st.number_input("Deposit (GBP)", min_value=0, max_value=1000000, value=config.ui.default_deposit_gbp, step=5000)
-        mortgage_term = st.slider("Mortgage term (years)", min_value=15, max_value=40, value=config.ui.default_mortgage_term_years)
-        target_price = st.number_input("Target property price", min_value=50000, max_value=5000000, value=_default_price, step=10000)
-        risk_tolerance = st.select_slider("Risk tolerance", options=config.ui.risk_tolerance_options, value="Balanced")
-        scenario = st.selectbox("Macro scenario", options=data.metadata["scenario_names"], index=data.metadata["scenario_names"].index("Baseline"), help=tooltip("scenario weights"))
-        st.caption("Defaults are approximate regional medians from ONS / MHCLG 2024. Adjust to match your situation.")
+        _default_income = _region_defaults.get(
+            "household_income", config.ui.default_income_gbp)
+        _default_price = _region_defaults.get(
+            "property_price", config.ui.default_property_price_gbp)
+        income = st.number_input("Gross annual household income (GBP)",
+                                 min_value=15000, max_value=500000, value=_default_income, step=5000)
+        deposit = st.number_input("Deposit (GBP)", min_value=0, max_value=1000000,
+                                  value=config.ui.default_deposit_gbp, step=5000)
+        mortgage_term = st.slider("Mortgage term (years)", min_value=15,
+                                  max_value=40, value=config.ui.default_mortgage_term_years)
+        target_price = st.number_input(
+            "Target property price", min_value=50000, max_value=5000000, value=_default_price, step=10000)
+        risk_tolerance = st.select_slider(
+            "Risk tolerance", options=config.ui.risk_tolerance_options, value="Balanced")
+        scenario = st.selectbox("Macro scenario", options=data.metadata["scenario_names"], index=data.metadata["scenario_names"].index(
+            "Baseline"), help=tooltip("scenario weights"))
+        st.caption(
+            "Defaults are approximate regional medians from ONS / MHCLG 2024. Adjust to match your situation.")
         inputs_valid = True
         if not (50000 <= target_price <= 5000000):
             st.error("Property price must be between £50,000 and £5,000,000")
@@ -691,7 +753,8 @@ def render_consumer_view() -> None:
         if target_price > 0:
             _deposit_pct = deposit / target_price * 100
             if _deposit_pct < 5 or _deposit_pct > 50:
-                st.warning("Typical mortgage deposits range from 5% to 50% of the property price.")
+                st.warning(
+                    "Typical mortgage deposits range from 5% to 50% of the property price.")
 
     if not inputs_valid:
         return
@@ -701,8 +764,10 @@ def render_consumer_view() -> None:
     selected_summary = _scenario_summary_row(region_summary, scenario)
 
     history = get_region_history(region, months=84)
-    sim_params, sim_meta = _scenario_parameters(region_row, scenario, stage5_row=selected_summary, horizon_years=5)
-    log_model_event(_logger, "simulation_run", {"region": region, "scenario": scenario, "n_paths": config.controls.default_paths_interactive, "view": "consumer"})
+    sim_params, sim_meta = _scenario_parameters(
+        region_row, scenario, stage5_row=selected_summary, horizon_years=5)
+    log_model_event(_logger, "simulation_run", {
+                    "region": region, "scenario": scenario, "n_paths": config.controls.default_paths_interactive, "view": "consumer"})
     paths = run_monte_carlo(
         start_price=float(region_row["nominal_house_price"]),
         n_months=60,
@@ -710,16 +775,21 @@ def render_consumer_view() -> None:
         params=sim_params,
         seed=config.controls.random_seed,
     )
-    summary = summarize_paths(paths, percentiles=config.ui.fan_chart_percentiles)
-    live_percentiles, live_downside_prob = _live_terminal_percentiles(paths, float(region_row["nominal_house_price"]))
+    summary = summarize_paths(
+        paths, percentiles=config.ui.fan_chart_percentiles)
+    live_percentiles, live_downside_prob = _live_terminal_percentiles(
+        paths, float(region_row["nominal_house_price"]))
     signal_dashboard = consumer_signal_dashboard(
         region,
         income,
         deposit,
         live_percentiles,
-        valuation_signal=float(region_row.get("C1_mispricing", region_row["consumer_score"])),
-        cycle_signal=float(region_row.get("C2_consumer", region_row["consumer_score"])),
-        property_price=target_price or float(region_row["nominal_house_price"]),
+        valuation_signal=float(region_row.get(
+            "C1_mispricing", region_row["consumer_score"])),
+        cycle_signal=float(region_row.get(
+            "C2_consumer", region_row["consumer_score"])),
+        property_price=target_price or float(
+            region_row["nominal_house_price"]),
         mortgage_rate=float(region_row["mortgage_rate"]),
         mortgage_term_years=mortgage_term,
         risk_tolerance=risk_tolerance,
@@ -732,16 +802,20 @@ def render_consumer_view() -> None:
 
     with results:
         st.markdown("### Supporting Signals")
-        _render_signal_dashboard(signal_dashboard["signals"], region_row=region_row)
+        _render_signal_dashboard(
+            signal_dashboard["signals"], region_row=region_row)
         st.caption(
             "⚠ Valuation and cycle signals use income and supply features estimated from "
             "annual data interpolated to monthly frequency. Timing precision within a "
             "calendar year should not be relied upon."
         )
-        st.page_link(render_methodology, label="See Model Limitations for detail.")
+        st.page_link(render_methodology,
+                     label="See Model Limitations for detail.")
         meta_cols = st.columns(2)
-        meta_cols[0].metric("Monthly payment", format_currency(signal_dashboard["mortgage_payment_monthly"]))
-        meta_cols[1].metric("Mortgage stress", signal_dashboard["mortgage_stress"])
+        meta_cols[0].metric("Monthly payment", format_currency(
+            signal_dashboard["mortgage_payment_monthly"]))
+        meta_cols[1].metric("Mortgage stress",
+                            signal_dashboard["mortgage_stress"])
         st.write(consumer_commentary(region_row, signal_dashboard, scenario))
         latest_hpi_date = region_row.get("latest_house_price_date")
         latest_hpi_value = region_row.get("latest_house_price")
@@ -756,7 +830,8 @@ def render_consumer_view() -> None:
                 f"(Stage 4 monthly sigma {sim_meta['stage4_sigma_monthly']:.2%}; "
                 f"rate channel mode: {sim_meta['rate_channel_mode'].replace('_', ' ')})."
             )
-        _render_secondary_synthesis_box(signal_dashboard["secondary_composite"])
+        _render_secondary_synthesis_box(
+            signal_dashboard["secondary_composite"])
 
     st.markdown("### Supporting Charts")
     st.pyplot(fan_chart(history, summary, region, sim_meta["scenario_name"]))
@@ -764,9 +839,12 @@ def render_consumer_view() -> None:
 
     bottom_left, bottom_right = st.columns(2)
     with bottom_left:
-        st.pyplot(score_breakdown_chart(_signal_scores_for_chart(signal_dashboard["signals"]), "Consumer signal dashboard"))
-        st.caption("Component view of the household signal panel, ordered to support interpretation rather than ranking.")
-        st.dataframe(_signal_evidence_table(signal_dashboard["signals"]), use_container_width=True, hide_index=True)
+        st.pyplot(score_breakdown_chart(_signal_scores_for_chart(
+            signal_dashboard["signals"]), "Consumer signal dashboard"))
+        st.caption(
+            "Component view of the household signal panel, ordered to support interpretation rather than ranking.")
+        st.dataframe(_signal_evidence_table(
+            signal_dashboard["signals"]), use_container_width=True, hide_index=True)
     with bottom_right:
         st.pyplot(scenario_comparison_chart(region_summary))
         st.caption("Canonical scenario comparison for the selected region. This helps frame how sensitive the outlook is to different macro paths.")
@@ -806,15 +884,19 @@ def render_reit_view() -> None:
 
     controls, results = st.columns([0.95, 1.05])
     with controls:
-        region = st.selectbox("Region", config.project.regions, index=config.project.regions.index(config.ui.default_region), key="reit_region")
-        scenario = st.selectbox("Scenario focus", options=data.metadata["scenario_names"], index=data.metadata["scenario_names"].index("Baseline"), key="reit_scenario", help=tooltip("scenario weights"))
+        region = st.selectbox("Region", config.project.regions, index=config.project.regions.index(
+            config.ui.default_region), key="reit_region")
+        scenario = st.selectbox("Scenario focus", options=data.metadata["scenario_names"], index=data.metadata["scenario_names"].index(
+            "Baseline"), key="reit_scenario", help=tooltip("scenario weights"))
 
     region_row = get_region_record(region)
     region_summary = get_region_simulation_summary(region)
     selected_summary = _scenario_summary_row(region_summary, scenario)
 
-    sim_params, sim_meta = _scenario_parameters(region_row, scenario, stage5_row=selected_summary, horizon_years=config.ui.default_holding_horizon_years)
-    log_model_event(_logger, "simulation_run", {"region": region, "scenario": scenario, "n_paths": config.controls.default_paths_interactive, "view": "reit"})
+    sim_params, sim_meta = _scenario_parameters(
+        region_row, scenario, stage5_row=selected_summary, horizon_years=config.ui.default_holding_horizon_years)
+    log_model_event(_logger, "simulation_run", {
+                    "region": region, "scenario": scenario, "n_paths": config.controls.default_paths_interactive, "view": "reit"})
     paths = run_monte_carlo(
         start_price=float(region_row["nominal_house_price"]),
         n_months=config.ui.default_holding_horizon_years * 12,
@@ -823,14 +905,19 @@ def render_reit_view() -> None:
         seed=config.controls.random_seed,
     )
     history = get_region_history(region, months=84)
-    summary = summarize_paths(paths, percentiles=config.ui.fan_chart_percentiles)
-    live_percentiles, live_downside_prob = _live_terminal_percentiles(paths, float(region_row["nominal_house_price"]))
+    summary = summarize_paths(
+        paths, percentiles=config.ui.fan_chart_percentiles)
+    live_percentiles, live_downside_prob = _live_terminal_percentiles(
+        paths, float(region_row["nominal_house_price"]))
     signal_dashboard = regional_market_signal_dashboard(
         region,
-        valuation_signal=float(region_row.get("C1_mispricing", region_row["reit_score"])),
-        cycle_signal=float(region_row.get("C3_regime", region_row.get("C2_reit", region_row["reit_score"]))),
+        valuation_signal=float(region_row.get(
+            "C1_mispricing", region_row["reit_score"])),
+        cycle_signal=float(region_row.get(
+            "C3_regime", region_row.get("C2_reit", region_row["reit_score"]))),
         downside_prob=live_downside_prob,
-        rent_support_signal=float(region_row.get("rent_support_percentile", 50.0)),
+        rent_support_signal=float(region_row.get(
+            "rent_support_percentile", 50.0)),
     )
 
     st.markdown("### Headline View")
@@ -841,16 +928,20 @@ def render_reit_view() -> None:
 
     with results:
         st.markdown("### Supporting Signals")
-        _render_signal_dashboard(signal_dashboard["signals"], region_row=region_row)
+        _render_signal_dashboard(
+            signal_dashboard["signals"], region_row=region_row)
         st.caption(
             "⚠ Valuation and cycle signals use income and supply features estimated from "
             "annual data interpolated to monthly frequency. Timing precision within a "
             "calendar year should not be relied upon."
         )
-        st.page_link(render_methodology, label="See Model Limitations for detail.")
+        st.page_link(render_methodology,
+                     label="See Model Limitations for detail.")
         meta_cols = st.columns(2)
-        meta_cols[0].metric("Current yield", format_pct(float(region_row["gross_yield_pct"]), precision=1))
-        meta_cols[1].metric("Scenario downside risk", format_pct(float(region_row.get("p_terminal_loss_10_avg", 0.0)) * 100.0, precision=0))
+        meta_cols[0].metric("Current yield", format_pct(
+            float(region_row["gross_yield_pct"]), precision=1))
+        meta_cols[1].metric("Scenario downside risk", format_pct(
+            float(region_row.get("p_terminal_loss_10_avg", 0.0)) * 100.0, precision=0))
         st.caption(
             f"For context: the model averaged {_downside_gfc:.0%} downside probability across regions "
             f"during the 2008\u201309 financial crisis and {_downside_2022:.0%} during the 2022\u201323 correction."
@@ -885,11 +976,15 @@ def render_reit_view() -> None:
 
     left, right = st.columns(2)
     with left:
-        st.pyplot(score_breakdown_chart(_signal_scores_for_chart(signal_dashboard["signals"]), "Regional signal dashboard"))
-        st.caption("Signal panel summary for the institutional lens. Component evidence should matter more than any blended summary.")
-        st.dataframe(_signal_evidence_table(signal_dashboard["signals"]), use_container_width=True, hide_index=True)
+        st.pyplot(score_breakdown_chart(_signal_scores_for_chart(
+            signal_dashboard["signals"]), "Regional signal dashboard"))
+        st.caption(
+            "Signal panel summary for the institutional lens. Component evidence should matter more than any blended summary.")
+        st.dataframe(_signal_evidence_table(
+            signal_dashboard["signals"]), use_container_width=True, hide_index=True)
         st.pyplot(yield_risk_chart(data.region_table, region))
-        st.caption("Current yield versus downside tail context across regions, with the selected region highlighted.")
+        st.caption(
+            "Current yield versus downside tail context across regions, with the selected region highlighted.")
     with right:
         st.pyplot(scenario_comparison_chart(region_summary))
         st.caption("Canonical scenario comparison for the selected region. Use this to frame sensitivity, not as a probability-weighted forecast table.")
@@ -897,7 +992,8 @@ def render_reit_view() -> None:
     with st.expander("Simulation calibration view", expanded=False):
         _render_simulation_transparency(region)
 
-    _csv_cols = ["date", "nominal_house_price", "real_house_price", "rental_yield", "fair_value_gap", "downside_probability"]
+    _csv_cols = ["date", "nominal_house_price", "real_house_price",
+                 "rental_yield", "fair_value_gap", "downside_probability"]
     _chart_csv = history[[c for c in _csv_cols if c in history.columns]].copy()
     _region_slug = region.lower().replace(" ", "_")
     st.download_button(
@@ -923,7 +1019,8 @@ def render_scenario_lab() -> None:
     data = load_dashboard_data()
     config = load_config()
     with DEFAULT_CONFIG_PATH.open(encoding="utf-8") as _fh:
-        scenario_descriptions: dict[str, str] = json.load(_fh).get("scenario_descriptions", {})
+        scenario_descriptions: dict[str, str] = json.load(
+            _fh).get("scenario_descriptions", {})
 
     _render_research_header(data, compact=True)
     st.title("Scenario & Simulation Diagnostics")
@@ -931,19 +1028,26 @@ def render_scenario_lab() -> None:
 
     left, right = st.columns([0.85, 1.15])
     with left:
-        region = st.selectbox("Region", config.project.regions, key="scenario_lab_region")
-        preset = st.selectbox("Preset", options=config.ui.scenario_labels, key="scenario_lab_preset", help=tooltip("scenario weights"))
+        region = st.selectbox(
+            "Region", config.project.regions, key="scenario_lab_region")
+        preset = st.selectbox("Preset", options=config.ui.scenario_labels,
+                              key="scenario_lab_preset", help=tooltip("scenario weights"))
         st.info(f"\U0001f4a1 {scenario_descriptions.get(preset, '')}")
         st.caption(
             "Note: Scenario paths are generated using expert-prior drift and volatility overlays applied to "
             "the baseline Ornstein-Uhlenbeck model. They do not represent re-estimated OLS coefficients "
             "under each macro regime."
         )
-        rate_shift = st.slider("Additional rate shock (bps)", min_value=-250, max_value=250, value=int(st.session_state["override_rate_shift_bps"]), step=25, key="override_rate_shift_bps", help=tooltip("rate channel"))
-        sigma_multiplier = st.slider("Volatility multiplier", min_value=0.5, max_value=2.0, value=float(st.session_state["override_sigma_multiplier"]), step=0.05, key="override_sigma_multiplier", help=tooltip("sigma"))
-        drift_shift = st.slider("Annual drift override (%)", min_value=-3.0, max_value=3.0, value=float(st.session_state["override_drift_shift_pct"]), step=0.25, key="override_drift_shift_pct", help=tooltip("drift"))
-        horizon_years = st.slider("Horizon (years)", min_value=2, max_value=15, value=int(st.session_state["override_horizon_years"]), key="override_horizon_years")
-        n_paths = st.slider("Simulation paths", min_value=250, max_value=config.controls.max_paths_interactive, value=int(st.session_state["override_paths"]), step=250, key="override_paths", help=tooltip("downside probability"))
+        rate_shift = st.slider("Additional rate shock (bps)", min_value=-250, max_value=250, value=int(
+            st.session_state["override_rate_shift_bps"]), step=25, key="override_rate_shift_bps", help=tooltip("rate channel"))
+        sigma_multiplier = st.slider("Volatility multiplier", min_value=0.5, max_value=2.0, value=float(
+            st.session_state["override_sigma_multiplier"]), step=0.05, key="override_sigma_multiplier", help=tooltip("sigma"))
+        drift_shift = st.slider("Annual drift override (%)", min_value=-3.0, max_value=3.0, value=float(
+            st.session_state["override_drift_shift_pct"]), step=0.25, key="override_drift_shift_pct", help=tooltip("drift"))
+        horizon_years = st.slider("Horizon (years)", min_value=2, max_value=15, value=int(
+            st.session_state["override_horizon_years"]), key="override_horizon_years")
+        n_paths = st.slider("Simulation paths", min_value=250, max_value=config.controls.max_paths_interactive, value=int(
+            st.session_state["override_paths"]), step=250, key="override_paths", help=tooltip("downside probability"))
         if st.button("Reset controls"):
             reset_override_state()
             st.rerun()
@@ -960,10 +1064,12 @@ def render_scenario_lab() -> None:
         drift_shift_pct=drift_shift,
         horizon_years=horizon_years,
     )
-    warning_text = override_warning(rate_shift, sigma_multiplier, horizon_years)
+    warning_text = override_warning(
+        rate_shift, sigma_multiplier, horizon_years)
     if warning_text:
         st.warning(warning_text)
-        _logger.warning("Guardrail fired: region=%s, rate_shift_bps=%s, sigma_multiplier=%s, horizon_years=%s", region, rate_shift, sigma_multiplier, horizon_years)
+        _logger.warning("Guardrail fired: region=%s, rate_shift_bps=%s, sigma_multiplier=%s, horizon_years=%s",
+                        region, rate_shift, sigma_multiplier, horizon_years)
 
     log_model_event(
         _logger,
@@ -984,14 +1090,19 @@ def render_scenario_lab() -> None:
         params=params,
         seed=config.controls.random_seed,
     )
-    summary = summarize_paths(paths, percentiles=config.ui.fan_chart_percentiles)
+    summary = summarize_paths(
+        paths, percentiles=config.ui.fan_chart_percentiles)
     history = get_region_history(region, months=84)
 
     with right:
-        st.metric("Target terminal fair value", format_currency(meta["target_fair_value"]), help=tooltip("fair value gap"))
-        rate_metric_label = "Scenario rate assumption" if meta["rate_channel_mode"] in {"rate_change_plus_stress", "rate_change_plus_aux_stress", "rate_gap_plus_aux_stress"} else "Scenario rate anchor"
-        st.metric(rate_metric_label, format_pct(meta["target_rate"], precision=2), help=tooltip("rate channel"))
-        st.metric("Annual volatility input", format_pct(params["sigma"] * 100.0, precision=1), help=tooltip("sigma"))
+        st.metric("Target terminal fair value", format_currency(
+            meta["target_fair_value"]), help=tooltip("fair value gap"))
+        rate_metric_label = "Scenario rate assumption" if meta["rate_channel_mode"] in {
+            "rate_change_plus_stress", "rate_change_plus_aux_stress", "rate_gap_plus_aux_stress"} else "Scenario rate anchor"
+        st.metric(rate_metric_label, format_pct(
+            meta["target_rate"], precision=2), help=tooltip("rate channel"))
+        st.metric("Annual volatility input", format_pct(
+            params["sigma"] * 100.0, precision=1), help=tooltip("sigma"))
         st.caption(meta["note"])
         st.pyplot(fan_chart(history, summary, region, meta["scenario_name"]))
         st.caption("Scenario path for the selected region under the chosen override set. This chart is a stress-testing view, not a forecast recommendation.")
@@ -1000,7 +1111,8 @@ def render_scenario_lab() -> None:
     _scenario_csv_frames = []
     for preset_name in config.ui.scenario_labels:
         preset_summary_row = _scenario_summary_row(region_summary, preset_name)
-        preset_params, preset_meta = _scenario_parameters(region_row, preset_name, stage5_row=preset_summary_row, horizon_years=horizon_years)
+        preset_params, preset_meta = _scenario_parameters(
+            region_row, preset_name, stage5_row=preset_summary_row, horizon_years=horizon_years)
         preset_paths = run_monte_carlo(
             start_price=float(region_row["nominal_house_price"]),
             n_months=horizon_years * 12,
@@ -1008,7 +1120,8 @@ def render_scenario_lab() -> None:
             params=preset_params,
             seed=config.controls.random_seed,
         )
-        preset_summary = summarize_paths(preset_paths, percentiles=[10, 25, 50, 75, 90])
+        preset_summary = summarize_paths(
+            preset_paths, percentiles=[10, 25, 50, 75, 90])
         start_price = float(region_row["nominal_house_price"])
         scenario_rows.append(
             {
@@ -1020,7 +1133,8 @@ def render_scenario_lab() -> None:
         )
         _n_proj = horizon_years * 12
         _start_date = pd.to_datetime(region_row["date"])
-        _proj_dates = [(_start_date + pd.DateOffset(months=m)).date() for m in range(1, _n_proj + 1)]
+        _proj_dates = [(_start_date + pd.DateOffset(months=m)).date()
+                       for m in range(1, _n_proj + 1)]
         _scenario_csv_frames.append(pd.DataFrame({
             "scenario_name": preset_name,
             "date": _proj_dates,
@@ -1068,7 +1182,8 @@ def render_model_controls() -> None:
                 st.markdown(f"**{term}**")
                 st.markdown(definition)
 
-    region = st.selectbox("Inspect region", config.project.regions, index=config.project.regions.index(config.ui.default_region), key="controls_region")
+    region = st.selectbox("Inspect region", config.project.regions, index=config.project.regions.index(
+        config.ui.default_region), key="controls_region")
     region_row = get_region_record(region)
     sigma_frequency = str(region_row.get("sigma_frequency", "monthly")).lower()
     sigma_label = "sigma_stage4_annual" if sigma_frequency == "annual" else "sigma_stage4_monthly"
@@ -1082,10 +1197,14 @@ def render_model_controls() -> None:
         [
             ("kappa", region_row["kappa"], "Stage 4 mean reversion speed"),
             (sigma_label, region_row["sigma"], sigma_description),
-            ("hist_vol_annual", region_row.get("hist_price_growth_vol_annual", np.nan), "Annualised historical monthly price-growth volatility"),
-            ("mu_equilibrium", region_row["mu_equilibrium"], "Stage 4 equilibrium price"),
-            ("P_star_now", region_row.get("P_star_now", np.nan), "Rate-conditional fair value used by Stage 6"),
-            ("gamma_annual", region_row.get("gamma_annual", np.nan), "Annual drift term"),
+            ("hist_vol_annual", region_row.get("hist_price_growth_vol_annual",
+             np.nan), "Annualised historical monthly price-growth volatility"),
+            ("mu_equilibrium",
+             region_row["mu_equilibrium"], "Stage 4 equilibrium price"),
+            ("P_star_now", region_row.get("P_star_now", np.nan),
+             "Rate-conditional fair value used by Stage 6"),
+            ("gamma_annual", region_row.get(
+                "gamma_annual", np.nan), "Annual drift term"),
         ],
         columns=["Parameter", "Value", "Description"],
     )
@@ -1094,10 +1213,14 @@ def render_model_controls() -> None:
     st.subheader("Interactive override guardrails")
     guardrails = pd.DataFrame(
         [
-            ("Rate override warning", f"{config.controls.override_warning_rate_bps:.0f} bps"),
-            ("Volatility warning", f"{config.controls.override_warning_sigma_multiplier:.1f}x calibrated sigma"),
-            ("Validated horizon", f"<= {config.controls.override_warning_horizon_years:.0f} years"),
-            ("Interactive path cap", f"{config.controls.max_paths_interactive:,}"),
+            ("Rate override warning",
+             f"{config.controls.override_warning_rate_bps:.0f} bps"),
+            ("Volatility warning",
+             f"{config.controls.override_warning_sigma_multiplier:.1f}x calibrated sigma"),
+            ("Validated horizon",
+             f"<= {config.controls.override_warning_horizon_years:.0f} years"),
+            ("Interactive path cap",
+             f"{config.controls.max_paths_interactive:,}"),
         ],
         columns=["Guardrail", "Threshold"],
     )
@@ -1141,7 +1264,6 @@ def render_methodology() -> None:
     st.subheader("Structural Stability Tests")
     try:
         from src.model.structural_breaks import run_chow_tests
-        from src.ui.loaders import get_region_history
         from src.core.paths import CANONICAL_PANEL_PATH
 
         import pandas as _pd_sb
@@ -1158,13 +1280,14 @@ def render_methodology() -> None:
 
         if _chow_summary["any_breaks_detected"]:
             st.warning(
-                "Structural breaks detected at 5% significance in: "
-                + ", ".join(_chow_summary["break_points_detected"])
-                + ". "
-                + _chow_summary["interpretation"]
+                "Structural breaks detected at 5% significance in: " +
+                ", ".join(_chow_summary["break_points_detected"]) +
+                ". " +
+                _chow_summary["interpretation"]
             )
         else:
-            st.success("No structural breaks detected at 5% significance level.")
+            st.success(
+                "No structural breaks detected at 5% significance level.")
     except Exception as _e:
         st.info(f"Structural break tests could not be run: {_e}")
 
@@ -1196,19 +1319,24 @@ def render_methodology() -> None:
             _c2_acc = _c2_summary.get("accuracy")
             if _c2_acc != _c2_acc:  # NaN check
                 st.metric("Accuracy (24m)", "N/A")
-                st.caption("Requires `downside_probability` column — not yet in panel.")
+                st.caption(
+                    "Requires `downside_probability` column — not yet in panel.")
             else:
                 st.metric("Accuracy (24m)", f"{_c2_acc:.1%}")
-                st.caption(f"Precision: {_c2_summary.get('precision', float('nan')):.1%} | Recall: {_c2_summary.get('recall', float('nan')):.1%}")
+                st.caption(
+                    f"Precision: {_c2_summary.get('precision', float('nan')):.1%} | Recall: {_c2_summary.get('recall', float('nan')):.1%}")
 
         with _col_c3:
             st.markdown("**C3 — Affordability**")
             if len(_c3_df) == 0:
                 st.metric("Accuracy (24m)", "N/A")
-                st.caption("Requires `affordability_gap` or `payment_burden_gap`.")
+                st.caption(
+                    "Requires `affordability_gap` or `payment_burden_gap`.")
             else:
-                st.metric("Accuracy (24m)", f"{_c3_summary.get('accuracy', 0):.1%}")
-                st.caption(f"Dir. IR: {_c3_summary.get('directional_information_ratio', float('nan')):.3f}")
+                st.metric("Accuracy (24m)",
+                          f"{_c3_summary.get('accuracy', 0):.1%}")
+                st.caption(
+                    f"Dir. IR: {_c3_summary.get('directional_information_ratio', float('nan')):.3f}")
 
         with _col_c4:
             st.markdown("**C4 — Rental Yield**")
@@ -1216,8 +1344,10 @@ def render_methodology() -> None:
                 st.metric("Accuracy (24m)", "N/A")
                 st.caption("Requires `gross_yield_pct` or `yield_lag1`.")
             else:
-                st.metric("Accuracy (24m)", f"{_c4_summary.get('accuracy', 0):.1%}")
-                st.caption(f"IR proxy: {_c4_summary.get('information_ratio_proxy', float('nan')):.3f}")
+                st.metric("Accuracy (24m)",
+                          f"{_c4_summary.get('accuracy', 0):.1%}")
+                st.caption(
+                    f"IR proxy: {_c4_summary.get('information_ratio_proxy', float('nan')):.3f}")
 
         with _col_c5:
             st.markdown("**C5 — Cycle / Momentum**")
@@ -1225,8 +1355,10 @@ def render_methodology() -> None:
                 st.metric("Accuracy (12m)", "N/A")
                 st.caption("Requires a momentum column in the panel.")
             else:
-                st.metric("Accuracy (12m)", f"{_c5_summary.get('accuracy', 0):.1%}")
-                st.caption(f"IR proxy: {_c5_summary.get('information_ratio_proxy', float('nan')):.3f}")
+                st.metric("Accuracy (12m)",
+                          f"{_c5_summary.get('accuracy', 0):.1%}")
+                st.caption(
+                    f"IR proxy: {_c5_summary.get('information_ratio_proxy', float('nan')):.3f}")
 
         st.caption(
             "Directional accuracy: fraction of calls that matched the realised direction. "
@@ -1310,14 +1442,16 @@ def render_comparison_view() -> None:
     st.caption("Compare key housing market metrics across regions over time.")
 
     all_regions = config.project.regions
-    default_regions = [r for r in ["London", "North East", "Yorkshire and The Humber", "South West"] if r in all_regions]
+    default_regions = [r for r in ["London", "North East",
+                                   "Yorkshire and The Humber", "South West"] if r in all_regions]
     selected = st.multiselect(
         "Select regions to compare (up to 4)",
         options=all_regions,
         default=default_regions,
     )
     if len(selected) > 4:
-        st.warning("More than 4 regions selected \u2014 only the first 4 will be shown.")
+        st.warning(
+            "More than 4 regions selected \u2014 only the first 4 will be shown.")
         selected = selected[:4]
     if not selected:
         st.info("Select at least one region to display the comparison.")
@@ -1344,16 +1478,19 @@ def render_comparison_view() -> None:
 
     _CI_COLS = ["fair_value_gap_lower_90", "fair_value_gap_upper_90"]
     fair_cols = ["region", "date", "fair_value_gap_log"] + _CI_COLS
-    available_fair_cols = [c for c in fair_cols if c in data.fair_panel.columns]
+    available_fair_cols = [
+        c for c in fair_cols if c in data.fair_panel.columns]
     panel_df = data.master.merge(
-        data.fair_panel[available_fair_cols].drop_duplicates(subset=["region", "date"]),
+        data.fair_panel[available_fair_cols].drop_duplicates(
+            subset=["region", "date"]),
         on=["region", "date"],
         how="left",
     )
 
     fig = plot_region_comparison(selected, metric, period, panel_df)
     st.pyplot(fig)
-    st.caption("Indices rebased to 100 at start of selected period. Source: Land Registry, ONS.")
+    st.caption(
+        "Indices rebased to 100 at start of selected period. Source: Land Registry, ONS.")
 
     if metric == "Fair Value Gap (%)":
         _has_ci = all(c in panel_df.columns for c in _CI_COLS)
@@ -1371,7 +1508,8 @@ def render_comparison_view() -> None:
             if not pd.notna(_row.get("fair_value_gap_log")):
                 continue
             _gap_pct = float(_row["fair_value_gap_log"]) * 100.0
-            _gap_cols[_i].metric(f"{_r}", f"{_gap_pct:+.1f}%", help="Current fair value gap (log-scale approximation to %)")
+            _gap_cols[_i].metric(
+                f"{_r}", f"{_gap_pct:+.1f}%", help="Current fair value gap (log-scale approximation to %)")
             if _has_ci and pd.notna(_row.get("fair_value_gap_lower_90")):
                 _lo = float(_row["fair_value_gap_lower_90"]) * 100.0
                 _hi = float(_row["fair_value_gap_upper_90"]) * 100.0
@@ -1380,6 +1518,8 @@ def render_comparison_view() -> None:
                     if (_lo > 0 and _hi > 0) or (_lo < 0 and _hi < 0)
                     else "not statistically significant at 90% level"
                 )
-                _gap_cols[_i].caption(f"90% CI: [{_lo:.1f}%, {_hi:.1f}%] — gap is {_sig}")
+                _gap_cols[_i].caption(
+                    f"90% CI: [{_lo:.1f}%, {_hi:.1f}%] — gap is {_sig}")
             else:
-                _gap_cols[_i].caption("Run pipeline to compute confidence intervals.")
+                _gap_cols[_i].caption(
+                    "Run pipeline to compute confidence intervals.")

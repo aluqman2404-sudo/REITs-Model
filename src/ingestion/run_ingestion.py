@@ -27,7 +27,6 @@ file and only overwrites raw data if the fetched data is newer.
 
 from __future__ import annotations
 
-import importlib
 import json
 import logging
 import subprocess
@@ -51,11 +50,13 @@ from src.ingestion.release_metadata import read_release_metadata, write_release_
 ROOT = Path(__file__).resolve().parents[2]
 LOGS_DIR = ROOT / "data" / "logs"
 STAGE6_OUTPUT_DIR = ROOT / "data" / "outputs" / "stage6"
-CANONICAL_METADATA_PATH = ROOT / "data" / "outputs" / "metadata" / "canonical_panel_metadata.json"
+CANONICAL_METADATA_PATH = ROOT / "data" / "outputs" / \
+    "metadata" / "canonical_panel_metadata.json"
 
 # ---------------------------------------------------------------------------
 # IngestionSource dataclass
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class IngestionSource:
@@ -104,17 +105,17 @@ class IngestionSource:
 def _build_sources() -> list[IngestionSource]:
     # Lazy imports so the module can be tested without importing everything at
     # module level (monkeypatching is simpler when imports are deferred).
-    from src.ingestion.land_registry    import fetch_land_registry
-    from src.ingestion.boe              import fetch_boe_rate
+    from src.ingestion.land_registry import fetch_land_registry
+    from src.ingestion.boe import fetch_boe_rate
     from src.ingestion.boe_mortgage_rate import fetch_boe_mortgage_rate
-    from src.ingestion.ons              import (
+    from src.ingestion.ons import (
         fetch_ons_cpi,
         fetch_ons_earnings,
         fetch_ons_earnings_regional,
         fetch_ons_population,
     )
-    from src.ingestion.mhclg            import fetch_mhclg_supply
-    from src.ingestion.ons_rental       import (
+    from src.ingestion.mhclg import fetch_mhclg_supply
+    from src.ingestion.ons_rental import (
         fetch_ons_rental_index,
         fetch_ons_rental_levels,
         compute_rental_yield,
@@ -264,7 +265,8 @@ def _build_sources() -> list[IngestionSource]:
 def _validate_output(df: pd.DataFrame, source: IngestionSource, log: logging.Logger) -> None:
     """Raise ValueError if df fails basic structural checks."""
     if df is None or df.empty:
-        raise ValueError(f"{source.display_name}: fetch returned empty DataFrame")
+        raise ValueError(
+            f"{source.display_name}: fetch returned empty DataFrame")
 
     missing_cols = [c for c in source.required_columns if c not in df.columns]
     if missing_cols:
@@ -281,7 +283,8 @@ def _validate_output(df: pd.DataFrame, source: IngestionSource, log: logging.Log
 
     dates = pd.to_datetime(df["date"], errors="coerce").dropna()
     if dates.empty:
-        raise ValueError(f"{source.display_name}: no parseable dates in 'date' column")
+        raise ValueError(
+            f"{source.display_name}: no parseable dates in 'date' column")
 
     years = dates.dt.year.nunique()
     if years < source.min_years:
@@ -308,7 +311,8 @@ def _check_coverage_regression(
     """Raise ValueError if the new data's max date is earlier than the prior sidecar."""
     prior = read_release_metadata(source.series, raw_data_dir)
     if prior is None:
-        log.debug("%s: no prior sidecar — regression check skipped", source.display_name)
+        log.debug("%s: no prior sidecar — regression check skipped",
+                  source.display_name)
         return
 
     prior_end_str = prior.get("observation_period_end", "")
@@ -347,7 +351,8 @@ def _call_fetch(
                 f"{source.display_name}: required prior results missing: {missing}"
             )
         positional = [results[k] for k in source.fn_args_from_results]
-        log.debug("%s: calling with positional args from %s", source.display_name, list(source.fn_args_from_results))
+        log.debug("%s: calling with positional args from %s",
+                  source.display_name, list(source.fn_args_from_results))
         return source.fetch_fn(*positional, save=True)
 
     return source.fetch_fn(save=True)
@@ -422,7 +427,7 @@ def _run_tests(log: logging.Logger) -> tuple[int, int]:
             import re
             m_passed = re.search(r"(\d+) passed", line)
             m_failed = re.search(r"(\d+) failed", line)
-            m_error  = re.search(r"(\d+) error", line)
+            m_error = re.search(r"(\d+) error", line)
             if m_passed:
                 passed = int(m_passed.group(1))
             if m_failed:
@@ -432,7 +437,8 @@ def _run_tests(log: logging.Logger) -> tuple[int, int]:
 
     log.info("Tests: %d passed, %d failed", passed, failed)
     if result.returncode != 0:
-        log.warning("Pytest exited with code %d — review test output", result.returncode)
+        log.warning(
+            "Pytest exited with code %d — review test output", result.returncode)
         # Log last 30 lines of output for diagnostics
         for line in output.splitlines()[-30:]:
             log.debug("pytest: %s", line)
@@ -462,7 +468,8 @@ def run_all(
     sources = _build_sources()
 
     log.info("=" * 72)
-    log.info("Quarterly refresh started at %s", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    log.info("Quarterly refresh started at %s",
+             datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     log.info("%d sources configured", len(sources))
     log.info("Log: %s", log_path)
 
@@ -472,7 +479,8 @@ def run_all(
 
     for source in sources:
         if source.pause_before_seconds:
-            log.debug("Pausing %ds before %s", source.pause_before_seconds, source.display_name)
+            log.debug("Pausing %ds before %s",
+                      source.pause_before_seconds, source.display_name)
             time.sleep(source.pause_before_seconds)
 
         log.info("Fetching %s", source.display_name)
@@ -488,7 +496,8 @@ def run_all(
                 key=lambda p: p.stat().st_mtime,
                 reverse=True,
             )
-            raw_file = raw_csvs[0] if raw_csvs else raw_data_dir / f"{source.series}.csv"
+            raw_file = raw_csvs[0] if raw_csvs else raw_data_dir / \
+                f"{source.series}.csv"
 
             write_release_metadata(
                 series=source.series,
@@ -535,11 +544,13 @@ def run_all(
 
     try:
         if CANONICAL_METADATA_PATH.exists():
-            meta = json.loads(CANONICAL_METADATA_PATH.read_text(encoding="utf-8"))
+            meta = json.loads(
+                CANONICAL_METADATA_PATH.read_text(encoding="utf-8"))
             new_panel_end = meta.get("panel_end")
             effective_data_as_of = meta.get("effective_data_as_of")
             if new_panel_end:
-                staleness_days = (date.today() - date.fromisoformat(new_panel_end)).days
+                staleness_days = (
+                    date.today() - date.fromisoformat(new_panel_end)).days
     except Exception as exc:
         log.warning("Could not read canonical metadata for summary: %s", exc)
 
@@ -557,8 +568,10 @@ def run_all(
     }
 
     log.info("=" * 72)
-    log.info("Refresh complete. Panel end: %s, staleness: %s days", new_panel_end, staleness_days)
-    log.info("%d/%d sources updated; %d errors", len(series_updated), len(sources), len(source_errors))
+    log.info("Refresh complete. Panel end: %s, staleness: %s days",
+             new_panel_end, staleness_days)
+    log.info("%d/%d sources updated; %d errors",
+             len(series_updated), len(sources), len(source_errors))
 
     return summary
 
@@ -574,7 +587,8 @@ def main() -> None:
     summary = run_all(stop_on_error=stop, run_pipeline=not no_pipeline)
     print(json.dumps(summary, indent=2))
 
-    has_errors = bool(summary.get("series_errors")) or summary.get("tests_failed", 0) > 0
+    has_errors = bool(summary.get("series_errors")
+                      ) or summary.get("tests_failed", 0) > 0
     sys.exit(1 if has_errors else 0)
 
 

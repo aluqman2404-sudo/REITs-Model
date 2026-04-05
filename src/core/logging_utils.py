@@ -40,7 +40,8 @@ def configure_monitoring(app_name: str = "uk-housing-model") -> logging.Logger:
     )
 
     # Always ensure at least one stdout handler
-    has_stream = any(isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler) for h in root.handlers)
+    has_stream = any(isinstance(h, logging.StreamHandler) and not isinstance(
+        h, logging.FileHandler) for h in root.handlers)
     if not has_stream:
         _sh = logging.StreamHandler()
         _sh.setFormatter(_formatter)
@@ -51,11 +52,13 @@ def configure_monitoring(app_name: str = "uk-housing-model") -> logging.Logger:
             import boto3  # noqa: F401
             from watchtower import CloudWatchLogHandler
 
-            log_group = os.environ.get("CLOUDWATCH_LOG_GROUP", "/uk-housing-model/app")
+            log_group = os.environ.get(
+                "CLOUDWATCH_LOG_GROUP", "/uk-housing-model/app")
             _cwh = CloudWatchLogHandler(log_group=log_group)
             _cwh.setFormatter(_formatter)
             root.addHandler(_cwh)
-            root.info("configure_monitoring: CloudWatch handler added (log_group=%s)", log_group)
+            root.info(
+                "configure_monitoring: CloudWatch handler added (log_group=%s)", log_group)
         except ImportError:
             _warnings.warn(
                 "configure_monitoring: LOG_DESTINATION=cloudwatch but watchtower/boto3 is not installed. "
@@ -73,11 +76,13 @@ def configure_monitoring(app_name: str = "uk-housing-model") -> logging.Logger:
         )
         _rfh.setFormatter(_formatter)
         root.addHandler(_rfh)
-        root.info("configure_monitoring: rotating file handler added (path=%s)", _log_path)
+        root.info(
+            "configure_monitoring: rotating file handler added (path=%s)", _log_path)
 
     elif destination == "datadog":
         try:
-            from datadog_logger import DatadogLogHandler  # type: ignore[import]
+            # type: ignore[import]
+            from datadog_logger import DatadogLogHandler
 
             _ddh = DatadogLogHandler()
             _ddh.setFormatter(_formatter)
@@ -124,4 +129,3 @@ def get_logger(name: str, log_file: Path | None = None) -> logging.Logger:
 
     logger.propagate = False
     return logger
-

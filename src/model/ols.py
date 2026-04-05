@@ -36,25 +36,31 @@ def fit_structural_fair_value(
 ) -> FairValueModelResult:
     """Fit a semi-structural fair-value model on annual anchor observations."""
     sample = master[master["date"].dt.month.isin(anchor_months)].copy()
-    sample = sample.dropna(subset=["log_real_price", *regressors]).reset_index(drop=True)
+    sample = sample.dropna(
+        subset=["log_real_price", *regressors]).reset_index(drop=True)
 
-    region_dummies = pd.get_dummies(sample["region"], prefix="region", drop_first=True, dtype=float)
+    region_dummies = pd.get_dummies(
+        sample["region"], prefix="region", drop_first=True, dtype=float)
     X = pd.concat([sample[regressors].astype(float), region_dummies], axis=1)
     X = sm.add_constant(X, has_constant="add")
     fit = sm.OLS(sample["log_real_price"], X).fit(cov_type="HC3")
 
-    full_region_dummies = pd.get_dummies(master["region"], prefix="region", drop_first=True, dtype=float)
+    full_region_dummies = pd.get_dummies(
+        master["region"], prefix="region", drop_first=True, dtype=float)
     for column in region_dummies.columns:
         if column not in full_region_dummies.columns:
             full_region_dummies[column] = 0.0
-    full_region_dummies = full_region_dummies.reindex(columns=region_dummies.columns, fill_value=0.0)
-    X_full = pd.concat([master[regressors].astype(float), full_region_dummies], axis=1)
+    full_region_dummies = full_region_dummies.reindex(
+        columns=region_dummies.columns, fill_value=0.0)
+    X_full = pd.concat([master[regressors].astype(
+        float), full_region_dummies], axis=1)
     X_full = sm.add_constant(X_full, has_constant="add")
 
     fitted = master.copy()
     fitted["fair_value_log_real"] = fit.predict(X_full)
     fitted["fair_value_real"] = np.exp(fitted["fair_value_log_real"])
-    fitted["fair_value_gap_log"] = fitted["log_real_price"] - fitted["fair_value_log_real"]
+    fitted["fair_value_gap_log"] = fitted["log_real_price"] - \
+        fitted["fair_value_log_real"]
 
     coefficients = pd.DataFrame(
         {

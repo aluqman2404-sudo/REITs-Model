@@ -15,7 +15,8 @@ from src.data.build_canonical_panel import build_canonical_panel
 
 SOURCE_PATH = CANONICAL_PANEL_PATH
 OUTPUT_PATH = PROCESSED_DATA_DIR / "ols_ready_dataset_v2.csv"
-METADATA_PATH = ensure_directory(OUTPUT_DATA_DIR / "stage3") / "stage4_ready_panel_metadata.json"
+METADATA_PATH = ensure_directory(
+    OUTPUT_DATA_DIR / "stage3") / "stage4_ready_panel_metadata.json"
 
 REQUIRED_COLUMNS = [
     "region",
@@ -74,11 +75,13 @@ def build_stage4_ready_panel(df: pd.DataFrame) -> pd.DataFrame:
     df = df.sort_values(["region", "date"]).reset_index(drop=True)
     if "earnings_growth_12m_lag1" not in df.columns and "real_annual_earnings" in df.columns:
         df["earnings_growth_12m_lag1"] = (
-            df.groupby("region", sort=False)["real_annual_earnings"].pct_change(12).shift(1)
+            df.groupby("region", sort=False)[
+                       "real_annual_earnings"].pct_change(12).shift(1)
         )
     missing = [column for column in REQUIRED_COLUMNS if column not in df.columns]
     if missing:
-        raise ValueError(f"master_dataset_v2 is missing required Stage 4 columns: {missing}")
+        raise ValueError(
+            f"master_dataset_v2 is missing required Stage 4 columns: {missing}")
 
     ordered_columns: list[str] = []
     for column in REQUIRED_COLUMNS + ENHANCED_COLUMNS + MONTH_COLUMNS:
@@ -104,15 +107,18 @@ def export_stage4_ready_panel(
     metadata = Stage4ReadyPanelMetadata(
         source_file=source_path.name,
         output_file=output_path.name,
-        generated_at_utc=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        generated_at_utc=datetime.now(
+            timezone.utc).isoformat(timespec="seconds"),
         row_count=int(len(panel)),
         region_count=int(panel["region"].nunique()),
         date_start=str(panel["date"].min().date()),
         date_end=str(panel["date"].max().date()),
         required_columns=REQUIRED_COLUMNS,
-        enhanced_columns_present=[column for column in ENHANCED_COLUMNS if column in panel.columns],
+        enhanced_columns_present=[
+            column for column in ENHANCED_COLUMNS if column in panel.columns],
     )
-    metadata_path.write_text(json.dumps(asdict(metadata), indent=2), encoding="utf-8")
+    metadata_path.write_text(json.dumps(
+        asdict(metadata), indent=2), encoding="utf-8")
     return metadata
 
 

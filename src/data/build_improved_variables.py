@@ -18,33 +18,33 @@ Run:
     python -m src.data.build_improved_variables
 """
 
+from linearmodels.panel import PanelOLS
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+from statsmodels.tsa.stattools import adfuller
+from datetime import datetime
+from pathlib import Path
+import scipy.stats as sp_stats
+import statsmodels.api as sm
+import pandas as pd
+import numpy as np
+import io
 import warnings
 warnings.filterwarnings("ignore")
 
-import io
-import numpy as np
-import pandas as pd
-import statsmodels.api as sm
-import scipy.stats as sp_stats
-from pathlib import Path
-from datetime import datetime
-from statsmodels.tsa.stattools import adfuller
-from statsmodels.stats.outliers_influence import variance_inflation_factor
-from linearmodels.panel import PanelOLS
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-ROOT    = Path(__file__).resolve().parents[2]
-PROC    = ROOT / "data" / "processed"
-RAW     = ROOT / "data" / "raw"
-OUT     = ROOT / "data" / "outputs"
-VIMP    = OUT / "variable_improvement"
+ROOT = Path(__file__).resolve().parents[2]
+PROC = ROOT / "data" / "processed"
+RAW = ROOT / "data" / "raw"
+OUT = ROOT / "data" / "outputs"
+VIMP = OUT / "variable_improvement"
 FIN_DIR = OUT / "stage4_final"
 
-INPUT_ENG   = PROC / "master_dataset_engineered.csv"
-RENTAL_CSV  = RAW  / "ons_rental_levels_202603.csv"
-SDE_FINAL   = FIN_DIR / "sde_parameters_final.csv"
-OUTPUT_V2   = PROC / "master_dataset_v2.csv"
-SDE_V2_CSV  = FIN_DIR / "sde_parameters_v2.csv"
+INPUT_ENG = PROC / "master_dataset_engineered.csv"
+RENTAL_CSV = RAW / "ons_rental_levels_202603.csv"
+SDE_FINAL = FIN_DIR / "sde_parameters_final.csv"
+OUTPUT_V2 = PROC / "master_dataset_v2.csv"
+SDE_V2_CSV = FIN_DIR / "sde_parameters_v2.csv"
 
 VIMP.mkdir(parents=True, exist_ok=True)
 
@@ -54,13 +54,13 @@ REGIONS = [
     "North West", "Northern Ireland", "Scotland", "South East",
     "South West", "Wales", "West Midlands", "Yorkshire and The Humber",
 ]
-MONTH_COLS  = [f"month_{m}" for m in range(2, 13)]
+MONTH_COLS = [f"month_{m}" for m in range(2, 13)]
 REGIME_COLS = ["regime_gfc", "regime_stamp_duty"]
-TRAIN_END   = pd.Timestamp("2015-12-01")
-TEST_START  = pd.Timestamp("2016-01-01")
+TRAIN_END = pd.Timestamp("2015-12-01")
+TEST_START = pd.Timestamp("2016-01-01")
 
 OLD_RMSE = 0.004905   # OLS + regime dummies, walk-forward 2016-2023
-OLD_R2   = 0.9606
+OLD_R2 = 0.9606
 
 _REPORT_LINES: list[str] = []
 
@@ -79,9 +79,12 @@ def _p(msg: str = "") -> None:
 
 
 def _stars(p: float) -> str:
-    if p < 0.01: return "***"
-    if p < 0.05: return "**"
-    if p < 0.10: return "*"
+    if p < 0.01:
+        return "***"
+    if p < 0.05:
+        return "**"
+    if p < 0.10:
+        return "*"
     return ""
 
 
@@ -118,7 +121,7 @@ def _adf_panel(df: pd.DataFrame, col: str) -> dict:
 
 
 def _univariate_panel_test(df: pd.DataFrame, var: str,
-                            dep: str = "price_growth") -> dict:
+                           dep: str = "price_growth") -> dict:
     """
     Univariate panel regression: dep ~ var + EntityEffects.
     Returns coef, t_stat, p_val, r2_within, n_obs.
@@ -134,11 +137,11 @@ def _univariate_panel_test(df: pd.DataFrame, var: str,
         res = PanelOLS(y, X, entity_effects=True).fit(
             cov_type="clustered", cluster_entity=True
         )
-        c   = res.params.get(var, np.nan)
-        se  = res.std_errors.get(var, np.nan)
-        t   = c / se if (not np.isnan(se) and se > 0) else np.nan
-        p   = float(res.pvalues.get(var, np.nan))
-        r2  = float(res.rsquared)
+        c = res.params.get(var, np.nan)
+        se = res.std_errors.get(var, np.nan)
+        t = c / se if (not np.isnan(se) and se > 0) else np.nan
+        p = float(res.pvalues.get(var, np.nan))
+        r2 = float(res.rsquared)
         return {"coef": c, "t_stat": t, "p_val": p,
                 "r2_within": r2, "n_obs": len(clean)}
     except Exception as e:
@@ -147,7 +150,7 @@ def _univariate_panel_test(df: pd.DataFrame, var: str,
 
 
 def _correlation_with_dep(df: pd.DataFrame, var: str,
-                           dep: str = "price_growth") -> float:
+                          dep: str = "price_growth") -> float:
     clean = df[[var, dep]].dropna()
     if len(clean) < 10:
         return np.nan
@@ -155,16 +158,16 @@ def _correlation_with_dep(df: pd.DataFrame, var: str,
 
 
 def _driscoll_kraay_se(model_result, X: pd.DataFrame,
-                        bandwidth: int = 12) -> np.ndarray:
+                       bandwidth: int = 12) -> np.ndarray:
     """Driscoll-Kraay HAC SE (Bartlett kernel)."""
     resids = model_result.resids
     shared = X.index.intersection(resids.index)
-    X_     = X.loc[shared].values.astype(float)
-    e_     = resids.loc[shared].values.astype(float)
-    dates  = X.loc[shared].index.get_level_values("date")
+    X_ = X.loc[shared].values.astype(float)
+    e_ = resids.loc[shared].values.astype(float)
+    dates = X.loc[shared].index.get_level_values("date")
     dates_u = sorted(set(dates))
-    T, k    = len(dates_u), X_.shape[1]
-    d_map   = {d: i for i, d in enumerate(dates_u)}
+    T, k = len(dates_u), X_.shape[1]
+    d_map = {d: i for i, d in enumerate(dates_u)}
 
     S = np.zeros((T, k))
     for i in range(len(X_)):
@@ -174,7 +177,7 @@ def _driscoll_kraay_se(model_result, X: pd.DataFrame,
     for t in range(T):
         Omega += np.outer(S[t], S[t])
     for lag in range(1, bandwidth + 1):
-        w  = 1 - lag / (bandwidth + 1)
+        w = 1 - lag / (bandwidth + 1)
         gl = np.zeros((k, k))
         for t in range(lag, T):
             gl += np.outer(S[t], S[t - lag])
@@ -210,9 +213,9 @@ def _entity_effects(params: pd.Series, train_df: pd.DataFrame,
                     feat_cols: list[str]) -> dict:
     y_mean = train_df["price_growth"].groupby(level="region").mean()
     X_mean = train_df[feat_cols].groupby(level="region").mean()
-    const  = params.get("const", 0.0)
-    beta   = params.drop("const", errors="ignore")
-    avail  = [c for c in feat_cols if c in beta.index]
+    const = params.get("const", 0.0)
+    beta = params.drop("const", errors="ignore")
+    avail = [c for c in feat_cols if c in beta.index]
     return {
         r: float(y_mean[r] - const - beta[avail] @ X_mean.loc[r, avail])
         for r in REGIONS if r in y_mean.index and r in X_mean.index
@@ -222,7 +225,7 @@ def _entity_effects(params: pd.Series, train_df: pd.DataFrame,
 def _predict_fe(params: pd.Series, test_df: pd.DataFrame,
                 feat_cols: list[str], alpha: dict) -> np.ndarray:
     const = params.get("const", 0.0)
-    beta  = params.drop("const", errors="ignore")
+    beta = params.drop("const", errors="ignore")
     avail = [c for c in feat_cols if c in beta.index and c in test_df.columns]
     preds = np.full(len(test_df), const)
     preds += test_df[avail].values @ beta[avail].values
@@ -232,15 +235,15 @@ def _predict_fe(params: pd.Series, test_df: pd.DataFrame,
 
 
 def _walk_forward_rmse(df: pd.DataFrame, exog_wf: list[str],
-                        stamp_coef: float = 0.0) -> tuple[float, float, float]:
+                       stamp_coef: float = 0.0) -> tuple[float, float, float]:
     """
     Walk-forward RMSE (train 2005-2015, test 2016-2023).
     stamp_coef: full-sample regime_stamp_duty coef applied to test predictions.
     """
-    dates    = df.index.get_level_values("date")
+    dates = df.index.get_level_values("date")
     train_df = df[dates <= TRAIN_END].dropna(subset=exog_wf + ["price_growth"])
-    test_df  = df[dates >= TEST_START].dropna(subset=exog_wf + ["price_growth"])
-    actual   = test_df["price_growth"].values
+    test_df = df[dates >= TEST_START].dropna(subset=exog_wf + ["price_growth"])
+    actual = test_df["price_growth"].values
 
     try:
         res = PanelOLS(
@@ -259,10 +262,10 @@ def _walk_forward_rmse(df: pd.DataFrame, exog_wf: list[str],
     if "regime_stamp_duty" in test_df.columns and stamp_coef != 0.0:
         preds = preds + stamp_coef * test_df["regime_stamp_duty"].values
 
-    err  = actual - preds
+    err = actual - preds
     rmse = float(np.sqrt(np.nanmean(err ** 2)))
-    mae  = float(np.nanmean(np.abs(err)))
-    da   = float(np.nanmean(np.sign(actual) == np.sign(preds))) * 100
+    mae = float(np.nanmean(np.abs(err)))
+    da = float(np.nanmean(np.sign(actual) == np.sign(preds))) * 100
     return rmse, mae, da
 
 
@@ -290,7 +293,8 @@ def load_base_data() -> pd.DataFrame:
     )
 
     # Time trend and seasonal dummies
-    df["time_trend"] = (df.groupby(level="region").cumcount() + 1).astype(float)
+    df["time_trend"] = (df.groupby(
+        level="region").cumcount() + 1).astype(float)
     month_s = df.index.get_level_values("date").month
     dummies = pd.get_dummies(
         pd.Series(month_s, index=df.index, name="month"),
@@ -303,8 +307,10 @@ def load_base_data() -> pd.DataFrame:
 
     # Regime dummies
     dates = df.index.get_level_values("date")
-    df["regime_gfc"]        = ((dates >= "2008-09-01") & (dates <= "2009-12-01")).astype(float)
-    df["regime_stamp_duty"] = ((dates >= "2021-04-01") & (dates <= "2021-09-01")).astype(float)
+    df["regime_gfc"] = ((dates >= "2008-09-01") &
+                        (dates <= "2009-12-01")).astype(float)
+    df["regime_stamp_duty"] = (
+        (dates >= "2021-04-01") & (dates <= "2021-09-01")).astype(float)
 
     _p(f"  Loaded: {df.shape[0]:,} rows × {df.shape[1]} columns")
     _p(f"  Date range: {df.index.get_level_values('date').min():%Y-%m} "
@@ -357,7 +363,8 @@ def build_affordability_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]
 
     corr_a = _correlation_with_dep(df, var_a)
     test_a = _univariate_panel_test(df, var_a)
-    corr_old_a = df[[var_a, "log_price_to_income_diff"]].dropna().corr().iloc[0, 1]
+    corr_old_a = df[[var_a, "log_price_to_income_diff"]
+                    ].dropna().corr().iloc[0, 1]
     _p(f"  {var_a}: Coef={test_a['coef']:+.6f}  t={test_a['t_stat']:+.2f}  "
        f"R²={test_a['r2_within']:.4f}  n={test_a['n_obs']:,}")
     _p(f"  Corr with price_growth={corr_a:.4f}  Corr with old PTI={corr_old_a:.4f}")
@@ -375,7 +382,8 @@ def build_affordability_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]
     adf_b = _adf_panel(df, "affordability_gap")
     corr_b = _correlation_with_dep(df, "affordability_gap")
     test_b = _univariate_panel_test(df, "affordability_gap")
-    corr_old_b = df[["affordability_gap", "log_price_to_income_diff"]].dropna().corr().iloc[0,1]
+    corr_old_b = df[["affordability_gap",
+                     "log_price_to_income_diff"]].dropna().corr().iloc[0, 1]
     _p(f"  ADF median p={adf_b['median_p']:.4f}  stationary={adf_b['stationary']}")
     _p(f"  Coef={test_b['coef']:+.6f}  t={test_b['t_stat']:+.2f}  "
        f"R²={test_b['r2_within']:.4f}  n={test_b['n_obs']:,}")
@@ -390,16 +398,18 @@ def build_affordability_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]
     n = 300
     r = (df["mortgage_rate"] / 12 / 100).clip(lower=0.001)
     annuity_factor = r * (1 + r)**n / ((1 + r)**n - 1)
-    loan_amount    = df["real_house_price"] * 0.80
+    loan_amount = df["real_house_price"] * 0.80
     monthly_payment = loan_amount * annuity_factor
     df["payment_burden"] = monthly_payment / (df["real_annual_earnings"] / 12)
-    regional_mean_burden = df.groupby(level="region")["payment_burden"].transform("mean")
+    regional_mean_burden = df.groupby(level="region")[
+                                      "payment_burden"].transform("mean")
     df["payment_burden_gap"] = df["payment_burden"] - regional_mean_burden
 
     adf_c = _adf_panel(df, "payment_burden_gap")
     corr_c = _correlation_with_dep(df, "payment_burden_gap")
     test_c = _univariate_panel_test(df, "payment_burden_gap")
-    corr_old_c = df[["payment_burden_gap", "log_price_to_income_diff"]].dropna().corr().iloc[0,1]
+    corr_old_c = df[["payment_burden_gap",
+                     "log_price_to_income_diff"]].dropna().corr().iloc[0, 1]
     _p(f"  ADF median p={adf_c['median_p']:.4f}  stationary={adf_c['stationary']}")
     _p(f"  Coef={test_c['coef']:+.6f}  t={test_c['t_stat']:+.2f}  "
        f"R²={test_c['r2_within']:.4f}  n={test_c['n_obs']:,}")
@@ -415,9 +425,10 @@ def build_affordability_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]
         rent_ok = df["real_monthly_rent"].notna().sum()
         _p(f"  real_monthly_rent available: {rent_ok:,} non-NaN obs")
 
-        df["price_to_rent"]  = df["real_house_price"] / (df["real_monthly_rent"] * 12)
-        df["log_ptr"]        = np.log(df["price_to_rent"].clip(lower=1e-6))
-        rolling_mean_ptr     = df.groupby(level="region")["log_ptr"].transform(
+        df["price_to_rent"] = df["real_house_price"] / \
+            (df["real_monthly_rent"] * 12)
+        df["log_ptr"] = np.log(df["price_to_rent"].clip(lower=1e-6))
+        rolling_mean_ptr = df.groupby(level="region")["log_ptr"].transform(
             lambda x: x.rolling(60, min_periods=24).mean()
         )
         df["ptr_gap"] = df["log_ptr"] - rolling_mean_ptr
@@ -425,7 +436,8 @@ def build_affordability_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]
         adf_d = _adf_panel(df, "ptr_gap")
         corr_d = _correlation_with_dep(df, "ptr_gap")
         test_d = _univariate_panel_test(df, "ptr_gap")
-        corr_old_d = df[["ptr_gap", "log_price_to_income_diff"]].dropna().corr().iloc[0,1]
+        corr_old_d = df[["ptr_gap", "log_price_to_income_diff"]
+                        ].dropna().corr().iloc[0, 1]
         _p(f"  ADF median p={adf_d['median_p']:.4f}  stationary={adf_d['stationary']}")
         _p(f"  Coef={test_d['coef']:+.6f}  t={test_d['t_stat']:+.2f}  "
            f"R²={test_d['r2_within']:.4f}  n={test_d['n_obs']:,}")
@@ -447,20 +459,22 @@ def build_affordability_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]
         if k not in results:
             continue
         r = results[k]
-        c  = f"{r['coef']:+.4f}"   if not np.isnan(r['coef'])       else "  n/a"
-        t  = f"{r['t_stat']:+.2f}" if not np.isnan(r['t_stat'])     else "  n/a"
-        r2 = f"{r['r2_within']:.4f}" if not np.isnan(r['r2_within']) else " n/a"
-        cd = f"{r['corr_dep']:.4f}" if not np.isnan(r['corr_dep'])  else " n/a"
+        c = f"{r['coef']:+.4f}" if not np.isnan(r['coef']) else "  n/a"
+        t = f"{r['t_stat']:+.2f}" if not np.isnan(r['t_stat']) else "  n/a"
+        r2 = f"{r['r2_within']:.4f}" if not np.isnan(
+            r['r2_within']) else " n/a"
+        cd = f"{r['corr_dep']:.4f}" if not np.isnan(r['corr_dep']) else " n/a"
         st = "YES" if r['adf_stationary'] else "NO"
-        label = r["label"].split(": ")[-1] if ": " in r["label"] else r["label"]
+        label = r["label"].split(
+            ": ")[-1] if ": " in r["label"] else r["label"]
         _p(f"  {label:<26} {c:>10} {t:>8} {r2:>10} {cd:>10} {st:>12}")
 
     # ── Selection ─────────────────────────────────────────────────────────────
     _p("\n  SELECTION RULE: corr < 0.95 AND highest |t| AND correct sign (neg) AND stationary")
     candidates = [(k, v) for k, v in results.items()
-                  if k != "log_pti_diff_OLD"
-                  and not np.isnan(v["t_stat"])
-                  and abs(v["corr_dep"]) < 0.95]
+                  if k != "log_pti_diff_OLD" and
+                  not np.isnan(v["t_stat"]) and
+                  abs(v["corr_dep"]) < 0.95]
 
     # Prefer negative sign; among valid, pick highest |t|
     neg_candidates = [(k, v) for k, v in candidates if v["coef"] < 0]
@@ -476,7 +490,7 @@ def build_affordability_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]
         _p(f"\n  SELECTED AFFORDABILITY VARIABLE: {sel_name} — reason: {reason}")
     else:
         sel_name = "affordability_gap"
-        reason   = "fallback: all candidates failed sign/correlation filters"
+        reason = "fallback: all candidates failed sign/correlation filters"
         _p(f"\n  SELECTED AFFORDABILITY VARIABLE (fallback): {sel_name}")
 
     return df, results, sel_name
@@ -512,10 +526,10 @@ def build_credit_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     _p("\n  VAR 2: rate regime interaction (rate × high_rate_period)")
     df["high_rate_period"] = (df["mortgage_rate"] > 4.0).astype(float)
     df["rate_x_high"] = df["mortgage_rate_lag3"] * df["high_rate_period"]
-    df["rate_x_low"]  = df["mortgage_rate_lag3"] * (1 - df["high_rate_period"])
+    df["rate_x_low"] = df["mortgage_rate_lag3"] * (1 - df["high_rate_period"])
 
     n_high = int(df["high_rate_period"].sum())
-    n_low  = int((1 - df["high_rate_period"]).sum())
+    n_low = int((1 - df["high_rate_period"]).sum())
     _p(f"  High-rate obs (rate > 4%): {n_high:,}  |  Low-rate obs: {n_low:,}")
 
     # Joint test: price_growth ~ rate_x_high + rate_x_low + EntityEffects
@@ -528,9 +542,9 @@ def build_credit_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
             cov_type="clustered", cluster_entity=True
         )
         c_high = res_j.params.get("rate_x_high", np.nan)
-        c_low  = res_j.params.get("rate_x_low",  np.nan)
+        c_low = res_j.params.get("rate_x_low",  np.nan)
         t_high = c_high / res_j.std_errors.get("rate_x_high", 1)
-        t_low  = c_low  / res_j.std_errors.get("rate_x_low",  1)
+        t_low = c_low / res_j.std_errors.get("rate_x_low",  1)
         _p(f"  rate_x_high: Coef={c_high:+.6f}  t={t_high:+.2f}")
         _p(f"  rate_x_low:  Coef={c_low:+.6f}  t={t_low:+.2f}")
         if np.sign(c_high) != np.sign(c_low):
@@ -538,11 +552,11 @@ def build_credit_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         else:
             _p("  ⚠️  Same signs — regime decomposition inconclusive")
         results["rate_x_high"] = {"coef": c_high, "t_stat": t_high, "p_val": np.nan,
-                                   "r2_within": res_j.rsquared, "n_obs": len(clean_j),
-                                   "adf_stationary": True, "label": "rate_x_high"}
-        results["rate_x_low"]  = {"coef": c_low,  "t_stat": t_low,  "p_val": np.nan,
-                                   "r2_within": res_j.rsquared, "n_obs": len(clean_j),
-                                   "adf_stationary": True, "label": "rate_x_low"}
+                                  "r2_within": res_j.rsquared, "n_obs": len(clean_j),
+                                  "adf_stationary": True, "label": "rate_x_high"}
+        results["rate_x_low"] = {"coef": c_low,  "t_stat": t_low,  "p_val": np.nan,
+                                 "r2_within": res_j.rsquared, "n_obs": len(clean_j),
+                                 "adf_stationary": True, "label": "rate_x_low"}
     except Exception as e:
         _p(f"  Joint rate test failed: {e}")
 
@@ -573,19 +587,23 @@ def build_credit_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
                 parse_dates=[0], dayfirst=True, on_bad_lines="skip"
             )
             # Standardise
-            approvals.columns = ["date", "approvals"] + list(approvals.columns[2:])
+            approvals.columns = ["date", "approvals"] + \
+                list(approvals.columns[2:])
             approvals = approvals[["date", "approvals"]].dropna()
-            approvals["date"] = pd.to_datetime(approvals["date"], dayfirst=True, errors="coerce")
+            approvals["date"] = pd.to_datetime(
+                approvals["date"], dayfirst=True, errors="coerce")
             approvals = approvals.dropna(subset=["date"])
             approvals = approvals.set_index("date").resample("MS").mean()
 
             # Broadcast to all regions
             df = df.reset_index()
-            approvals_reset = approvals.reset_index().rename(columns={"date": "date"})
-            df = df.merge(approvals_reset[["date", "approvals"]], on="date", how="left")
+            approvals_reset = approvals.reset_index().rename(
+                columns={"date": "date"})
+            df = df.merge(
+                approvals_reset[["date", "approvals"]], on="date", how="left")
             df = df.set_index(["region", "date"]).sort_index()
 
-            df["approvals_lag1"]   = df.groupby(level="region")["approvals"].transform(
+            df["approvals_lag1"] = df.groupby(level="region")["approvals"].transform(
                 lambda s: s.shift(1)
             )
             df["approvals_growth"] = df.groupby(level="region")["approvals"].transform(
@@ -606,9 +624,9 @@ def build_credit_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         _p(f"  ⚠️  Mortgage approvals download failed: {e}")
         _p("  Note: approvals_growth excluded from variable set")
         results["approvals_growth"] = {"coef": np.nan, "t_stat": np.nan, "p_val": np.nan,
-                                        "r2_within": np.nan, "n_obs": 0,
-                                        "adf_stationary": False, "label": "approvals_growth",
-                                        "skip_reason": "download failed"}
+                                       "r2_within": np.nan, "n_obs": 0,
+                                       "adf_stationary": False, "label": "approvals_growth",
+                                       "skip_reason": "download failed"}
 
     return df, results
 
@@ -664,7 +682,7 @@ def build_supply_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         raw_path.unlink()   # clean up temp file
         raw_path.with_suffix(".csv").write_text(
             starts_m.reset_index().rename(columns={0: "housing_starts",
-                                                    starts_col: "housing_starts"}).to_csv(index=False)
+                                                   starts_col: "housing_starts"}).to_csv(index=False)
         )
 
         # Broadcast to regions
@@ -674,7 +692,7 @@ def build_supply_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         df = df.merge(starts_df, on="date", how="left")
         df = df.set_index(["region", "date"]).sort_index()
 
-        df["starts_lag6"]  = df.groupby(level="region")["housing_starts"].transform(
+        df["starts_lag6"] = df.groupby(level="region")["housing_starts"].transform(
             lambda s: s.shift(6)
         )
         df["starts_lag12"] = df.groupby(level="region")["housing_starts"].transform(
@@ -691,9 +709,9 @@ def build_supply_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     except Exception as e:
         _p(f"  ⚠️  Housing starts download failed: {e}")
         results["starts_lag6"] = {"coef": np.nan, "t_stat": np.nan, "p_val": np.nan,
-                                   "r2_within": np.nan, "n_obs": 0,
-                                   "adf_stationary": False, "label": "starts_lag6",
-                                   "skip_reason": "download failed"}
+                                  "r2_within": np.nan, "n_obs": 0,
+                                  "adf_stationary": False, "label": "starts_lag6",
+                                  "skip_reason": "download failed"}
 
     # ── Variable 2: planning approvals download ───────────────────────────────
     _p("\n  VAR 2: planning approvals (MHCLG P153) — attempting download …")
@@ -710,10 +728,10 @@ def build_supply_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
 
         xl = pd.read_excel(raw_path, sheet_name=0, skiprows=6, index_col=0)
         app_col = xl.columns[0]
-        apps_q  = xl[app_col].dropna()
+        apps_q = xl[app_col].dropna()
         apps_q.index = pd.to_datetime(apps_q.index, errors="coerce")
-        apps_q  = apps_q.dropna().sort_index()
-        apps_m  = apps_q.resample("MS").interpolate(method="linear")
+        apps_q = apps_q.dropna().sort_index()
+        apps_m = apps_q.resample("MS").interpolate(method="linear")
 
         raw_path.unlink()
 
@@ -727,7 +745,7 @@ def build_supply_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
             lambda s: s.shift(12)
         )
         test_pl = _univariate_panel_test(df, "planning_approvals_lag12")
-        _p(f"  ✅ Planning approvals downloaded")
+        _p("  ✅ Planning approvals downloaded")
         _p(f"  planning_approvals_lag12: Coef={test_pl['coef']:+.4e}  "
            f"t={test_pl['t_stat']:+.2f}")
         results["planning_approvals_lag12"] = {
@@ -747,7 +765,8 @@ def build_supply_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     df["supply_smooth_12m"] = df.groupby(level="region")["net_additions_monthly"].transform(
         lambda x: x.rolling(12).mean()
     )
-    regional_mean_supply = df.groupby(level="region")["net_additions_monthly"].transform("mean")
+    regional_mean_supply = df.groupby(level="region")[
+                                      "net_additions_monthly"].transform("mean")
     df["supply_gap"] = df["net_additions_monthly"] - regional_mean_supply
     df["supply_gap_lag12"] = df.groupby(level="region")["supply_gap"].transform(
         lambda x: x.shift(12)
@@ -769,18 +788,18 @@ def build_supply_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     _p(f"  {'Variable':<28} {'Coef':>12} {'t-stat':>8} {'Sign':>20}")
     _p(f"  {'-'*28} {'-'*12} {'-'*8} {'-'*20}")
     for k, v in results.items():
-        c  = f"{v['coef']:+.2e}" if not np.isnan(v["coef"]) else "  n/a"
-        t  = f"{v['t_stat']:+.2f}" if not np.isnan(v["t_stat"]) else "  n/a"
-        s  = ("✅ negative" if (not np.isnan(v["coef"]) and v["coef"] < 0)
-              else ("⚠️ positive" if (not np.isnan(v["coef"]) and v["coef"] > 0)
-                    else "n/a"))
+        c = f"{v['coef']:+.2e}" if not np.isnan(v["coef"]) else "  n/a"
+        t = f"{v['t_stat']:+.2f}" if not np.isnan(v["t_stat"]) else "  n/a"
+        s = ("✅ negative" if (not np.isnan(v["coef"]) and v["coef"] < 0)
+             else ("⚠️ positive" if (not np.isnan(v["coef"]) and v["coef"] > 0)
+                   else "n/a"))
         _p(f"  {v['label']:<28} {c:>12} {t:>8} {s:>20}")
 
     # ── Selection ─────────────────────────────────────────────────────────────
     candidates = [(k, v) for k, v in results.items()
-                  if k != "supply_lag3_OLD"
-                  and not np.isnan(v["t_stat"])
-                  and v.get("skip_reason") is None]
+                  if k != "supply_lag3_OLD" and
+                  not np.isnan(v["t_stat"]) and
+                  v.get("skip_reason") is None]
     neg_cands = [(k, v) for k, v in candidates if v["coef"] < 0]
     pool = neg_cands if neg_cands else candidates
 
@@ -813,7 +832,8 @@ def build_supplementary_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]
             "peopleinwork/employmentandemployeetypes/datasets/"
             "regionalemploymentunemploymentandeconomicinactivity/current/regional.xls"
         )
-        resp = requests.get(url, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
+        resp = requests.get(url, timeout=30, headers={
+                            "User-Agent": "Mozilla/5.0"})
         resp.raise_for_status()
         raw_path = RAW / "ons_regional_unemployment.xls"
         raw_path.write_bytes(resp.content)
@@ -832,7 +852,8 @@ def build_supplementary_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]
             # Parse and merge
             _p(f"  Found sheet: {unemp_sheet}, shape={xl.shape}")
             raw_path.unlink()
-            raise ValueError("Unemployment: sheet found but regional mapping requires manual review")
+            raise ValueError(
+                "Unemployment: sheet found but regional mapping requires manual review")
         else:
             raw_path.unlink()
             raise ValueError("No unemployment sheet found in download")
@@ -892,7 +913,8 @@ def build_supplementary_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]
                            names=["date", "confidence"])
         conf = conf.dropna()
         conf["date"] = pd.to_datetime(conf["date"], errors="coerce")
-        conf = conf.dropna(subset=["date"]).set_index("date").resample("MS").mean()
+        conf = conf.dropna(subset=["date"]).set_index(
+            "date").resample("MS").mean()
 
         # Broadcast to regions
         df = df.reset_index()
@@ -954,18 +976,18 @@ def select_best_variables(
     Returns (add_list, reject_list).
     add_list: variables to include in v2 spec beyond base + aff + supply + rate.
     """
-    add_list    = []
+    add_list = []
     reject_list = []
 
     # Always-included: lender_spread_lag3 if |t| > 2 and correct sign
     ls = all_results.get("lender_spread_lag3", {})
-    if (not np.isnan(ls.get("t_stat", np.nan))
-            and abs(ls["t_stat"]) > 2.0
-            and ls.get("coef", 0) < 0):
+    if (not np.isnan(ls.get("t_stat", np.nan)) and
+            abs(ls["t_stat"]) > 2.0 and
+            ls.get("coef", 0) < 0):
         add_list.append("lender_spread_lag3")
     else:
         reject_list.append(("lender_spread_lag3",
-                             f"t={ls.get('t_stat', np.nan):.2f} or wrong sign"))
+                            f"t={ls.get('t_stat', np.nan):.2f} or wrong sign"))
 
     # Supplementary vars: include if |t| > 2 and correct sign and not skipped
     for var in ["approvals_growth", "unemployment_diff", "transaction_growth",
@@ -974,8 +996,8 @@ def select_best_variables(
         if r.get("skip_reason"):
             reject_list.append((var, r["skip_reason"]))
             continue
-        t   = r.get("t_stat", np.nan)
-        c   = r.get("coef", np.nan)
+        t = r.get("t_stat", np.nan)
+        c = r.get("coef", np.nan)
         if np.isnan(t) or np.isnan(c):
             reject_list.append((var, "no valid estimate"))
             continue
@@ -1008,24 +1030,19 @@ def build_improved_dataset(
     # ── Assemble variable list ────────────────────────────────────────────────
     core_keep = ["price_growth", "earnings_lag1_diff", "price_growth_lag1",
                  "time_trend"] + REGIME_COLS + MONTH_COLS
-    replace_map = {
-        "log_price_to_income_diff": sel_aff,
-        "mortgage_rate_lag3":       "rate_x_high + rate_x_low",
-        "supply_lag3":              sel_supply,
-    }
     new_vars = ["rate_x_high", "rate_x_low", sel_aff, sel_supply] + add_vars
 
-    all_needed = (core_keep + new_vars
-                  + ["nominal_house_price", "real_house_price", "region",
-                     "date", "mortgage_rate", "base_rate", "real_annual_earnings",
-                     "net_additions_monthly", "log_price_to_income",
-                     "log_real_price", "price_growth_3m", "price_growth_12m",
-                     "lender_spread"])
+    all_needed = (core_keep + new_vars +
+                  ["nominal_house_price", "real_house_price", "region",
+                   "date", "mortgage_rate", "base_rate", "real_annual_earnings",
+                   "net_additions_monthly", "log_price_to_income",
+                   "log_real_price", "price_growth_3m", "price_growth_12m",
+                   "lender_spread"])
 
     # Filter to columns that actually exist
     available = [c for c in all_needed if c in df.columns]
-    extra     = [c for c in df.columns if c not in available]
-    df_v2     = df[[c for c in df.columns if c in available or c in extra]].copy()
+    extra = [c for c in df.columns if c not in available]
+    df_v2 = df[[c for c in df.columns if c in available or c in extra]].copy()
 
     # ── Stationarity check ────────────────────────────────────────────────────
     _p("\n  STATIONARITY CHECK (new variables)")
@@ -1061,7 +1078,7 @@ def build_improved_dataset(
     # ── Print selection summary ───────────────────────────────────────────────
     _p("\n  VARIABLE SELECTION SUMMARY")
     _p(f"  REPLACE: log_price_to_income_diff → {sel_aff}")
-    _p(f"  REPLACE: mortgage_rate_lag3 → rate_x_high + rate_x_low")
+    _p("  REPLACE: mortgage_rate_lag3 → rate_x_high + rate_x_low")
     _p(f"  REPLACE: supply_lag3 → {sel_supply}")
     for var in add_vars:
         r = all_results.get(var, {})
@@ -1110,18 +1127,18 @@ def run_improved_ols(
 
     # ── Full-sample OLS + DK SE ───────────────────────────────────────────────
     _p("\n  Full-sample OLS + Driscoll-Kraay SE …")
-    model  = PanelOLS(y, X, entity_effects=True)
+    model = PanelOLS(y, X, entity_effects=True)
     res_v2 = model.fit(cov_type="kernel", kernel="bartlett", bandwidth=12)
-    dk_se  = _driscoll_kraay_se(res_v2, X)
+    dk_se = _driscoll_kraay_se(res_v2, X)
     dk_map = dict(zip(X.columns, dk_se))
 
     _p(f"\n  {'Variable':<30} {'Coef':>12} {'DK SE':>10} {'t-stat':>8} {'Sig':>5}")
     _p(f"  {'-'*30} {'-'*12} {'-'*10} {'-'*8} {'-'*5}")
     for var in EXOG_V2:
-        c   = res_v2.params.get(var, np.nan)
-        se  = dk_map.get(var, np.nan)
-        t   = c / se if (not np.isnan(se) and se > 0) else np.nan
-        p   = 2 * (1 - sp_stats.norm.cdf(abs(t))) if not np.isnan(t) else np.nan
+        c = res_v2.params.get(var, np.nan)
+        se = dk_map.get(var, np.nan)
+        t = c / se if (not np.isnan(se) and se > 0) else np.nan
+        p = 2 * (1 - sp_stats.norm.cdf(abs(t))) if not np.isnan(t) else np.nan
         sig = _stars(p) if not np.isnan(p) else ""
         _p(f"  {var:<30} {c:>+12.6f} {se:>10.6f} {t:>+8.2f} {sig:>5}")
 
@@ -1169,14 +1186,14 @@ def run_improved_ols(
 
     # Update OLS-derived columns
     for var in EXOG_V2:
-        c  = float(res_v2.params.get(var, np.nan))
+        c = float(res_v2.params.get(var, np.nan))
         se = float(dk_map.get(var, np.nan))
-        sde_v2[f"v2_{var}"]    = c
+        sde_v2[f"v2_{var}"] = c
         sde_v2[f"v2_{var}_se"] = se
 
     sde_v2["v2_r2_within"] = r2_v2
-    sde_v2["v2_rmse_wf"]   = rmse_v2 if not np.isnan(rmse_v2) else None
-    sde_v2["v2_sel_aff"]   = sel_aff
+    sde_v2["v2_rmse_wf"] = rmse_v2 if not np.isnan(rmse_v2) else None
+    sde_v2["v2_sel_aff"] = sel_aff
     sde_v2["v2_sel_supply"] = sel_supply
     sde_v2["v2_spec_note"] = (
         f"V2: {sel_aff} replaces log_pti_diff; {sel_supply} replaces supply_lag3; "
@@ -1205,7 +1222,7 @@ def save_outputs(
     # ── selected_vars.txt ─────────────────────────────────────────────────────
     selected_txt = VIMP / "selected_vars.txt"
     lines = [
-        f"UK Housing Model — Selected Variable Set (v2)",
+        "UK Housing Model — Selected Variable Set (v2)",
         f"Generated: {datetime.now():%Y-%m-%d %H:%M:%S}",
         "=" * 50,
         "",
@@ -1249,8 +1266,8 @@ def save_outputs(
             "adf_stationary": res.get("adf_stationary", np.nan),
             "adf_median_p":   res.get("adf_median_p", np.nan),
             "skip_reason":    res.get("skip_reason", ""),
-            "selected":       var in ([sel_aff, sel_supply, "rate_x_high", "rate_x_low"]
-                                       + add_vars),
+            "selected":       var in ([sel_aff, sel_supply, "rate_x_high", "rate_x_low"] +
+                                      add_vars),
         })
     pd.DataFrame(rows).to_csv(VIMP / "all_candidate_tests.csv", index=False)
 
@@ -1258,7 +1275,7 @@ def save_outputs(
     report_path = VIMP / "variable_selection_report.txt"
     report_path.write_text("\n".join(_REPORT_LINES), encoding="utf-8")
 
-    print(f"\n[Outputs saved]")
+    print("\n[Outputs saved]")
     print(f"  {selected_txt.relative_to(ROOT)}")
     print(f"  {(VIMP / 'all_candidate_tests.csv').relative_to(ROOT)}")
     print(f"  {report_path.relative_to(ROOT)}")
@@ -1297,7 +1314,8 @@ def main() -> None:
     }
 
     # Part 5 — Select and build v2 dataset
-    add_vars, reject_vars = select_best_variables(all_results, sel_aff, sel_supply)
+    add_vars, reject_vars = select_best_variables(
+        all_results, sel_aff, sel_supply)
 
     df_v2 = build_improved_dataset(
         df, sel_aff, sel_supply, add_vars, reject_vars, all_results

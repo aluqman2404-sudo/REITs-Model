@@ -27,8 +27,10 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 PANEL_PATH = ROOT / "data" / "processed" / "master_dataset_canonical.csv"
-FAIR_VALUE_PATH = ROOT / "data" / "outputs" / "stage4_final" / "fair_value_panel_bankgrade.csv"
-SDE_PARAMS_PATH = ROOT / "data" / "outputs" / "stage4_final" / "sde_parameters_bankgrade.csv"
+FAIR_VALUE_PATH = ROOT / "data" / "outputs" / \
+    "stage4_final" / "fair_value_panel_bankgrade.csv"
+SDE_PARAMS_PATH = ROOT / "data" / "outputs" / \
+    "stage4_final" / "sde_parameters_bankgrade.csv"
 OUTPUT_DIR = ROOT / "data" / "outputs" / "validation"
 OUTPUT_PATH = OUTPUT_DIR / "model_comparison.json"
 
@@ -43,7 +45,7 @@ HORIZON_12M = 12
 
 
 def _ou_point_forecast(log_p_current: float, log_p_star: float,
-                        kappa: float, gamma_annual: float, h: int) -> float:
+                       kappa: float, gamma_annual: float, h: int) -> float:
     """Log-OU median forecast at horizon h months.
 
     E[log P_{t+h}] = log P* + (log P_t - log P*) * exp(-kappa * h * DT)
@@ -55,8 +57,8 @@ def _ou_point_forecast(log_p_current: float, log_p_star: float,
 
 
 def _gbm_median_forecast(log_p_current: float, mu_monthly: float,
-                          sigma_annual: float, h: int,
-                          rng: np.random.Generator) -> float:
+                         sigma_annual: float, h: int,
+                         rng: np.random.Generator) -> float:
     """GBM median forecast via 500 simulated paths.
 
     dlog P = (mu_monthly - 0.5*sigma_monthly^2) * dt + sigma_monthly * dW
@@ -69,7 +71,7 @@ def _gbm_median_forecast(log_p_current: float, mu_monthly: float,
 
 
 def _rw_median_forecast(log_p_current: float, sigma_annual: float,
-                         h: int, rng: np.random.Generator) -> float:
+                        h: int, rng: np.random.Generator) -> float:
     """Random walk median forecast.
 
     P_{t+h} = P_t * exp(sigma * sqrt(h*DT) * z), z ~ N(0,1)
@@ -82,7 +84,7 @@ def _rw_median_forecast(log_p_current: float, sigma_annual: float,
 
 
 def _metrics(actuals: np.ndarray, forecasts: np.ndarray,
-              actual_changes: np.ndarray) -> dict:
+             actual_changes: np.ndarray) -> dict:
     """Compute RMSE and directional accuracy."""
     errors = actuals - forecasts
     rmse = float(np.sqrt(np.mean(errors ** 2)))
@@ -104,7 +106,8 @@ def run_model_comparison() -> dict:
 
     rng = np.random.default_rng(RNG_SEED)
 
-    holdout_mask = (panel["date"] >= HOLDOUT_START) & (panel["date"] < HOLDOUT_END)
+    holdout_mask = (panel["date"] >= HOLDOUT_START) & (
+        panel["date"] < HOLDOUT_END)
     regions = sde.index.tolist()
 
     # Accumulators for pooled results
@@ -118,7 +121,8 @@ def run_model_comparison() -> dict:
     regional_results: dict[str, dict] = {}
 
     for region in regions:
-        reg = panel[panel["region"] == region].sort_values("date").reset_index(drop=True)
+        reg = panel[panel["region"] == region].sort_values(
+            "date").reset_index(drop=True)
         if len(reg) < 30:
             continue
 
@@ -128,11 +132,14 @@ def run_model_comparison() -> dict:
         gamma_annual = float(row["gamma_annual_pp"]) / 100.0
 
         # Time-varying P* from fair value panel
-        fv_reg = fv_panel[fv_panel["region"] == region].sort_values("date").reset_index(drop=True)
-        fv_dict = dict(zip(fv_reg["date"], np.log(fv_reg["fair_value_nominal"].values)))
+        fv_reg = fv_panel[fv_panel["region"] == region].sort_values(
+            "date").reset_index(drop=True)
+        fv_dict = dict(zip(fv_reg["date"], np.log(
+            fv_reg["fair_value_nominal"].values)))
 
         # Historical mean monthly log-return for GBM (from full panel pre-holdout)
-        pre_holdout = panel[(panel["region"] == region) & (panel["date"] < HOLDOUT_START)].copy()
+        pre_holdout = panel[(panel["region"] == region) & (
+            panel["date"] < HOLDOUT_START)].copy()
         if len(pre_holdout) > 12:
             log_prices_pre = np.log(pre_holdout["nominal_house_price"].values)
             monthly_returns_pre = np.diff(log_prices_pre)
@@ -141,17 +148,19 @@ def run_model_comparison() -> dict:
             mu_monthly = gamma_annual * DT
 
         # Holdout series (include one observation before holdout start for lagging)
-        reg_hold = panel[(panel["region"] == region) & holdout_mask].sort_values("date").reset_index(drop=True)
+        reg_hold = panel[(panel["region"] == region) & holdout_mask].sort_values(
+            "date").reset_index(drop=True)
 
         if len(reg_hold) < 15:
-            print(f"  {region}: insufficient holdout data ({len(reg_hold)} obs) — skipping")
+            print(
+                f"  {region}: insufficient holdout data ({len(reg_hold)} obs) — skipping")
             continue
 
         log_prices = np.log(reg_hold["nominal_house_price"].values)
         # Time-varying log P* aligned to holdout dates
         dates = reg_hold["date"].values
         log_p_star_series = np.array([fv_dict.get(pd.Timestamp(d), np.log(float(row["mu_equilibrium"])))
-                                       for d in dates])
+                                      for d in dates])
         n = len(log_prices)
 
         # --- 1-month-ahead forecasts ---
@@ -163,8 +172,10 @@ def run_model_comparison() -> dict:
         for i in range(1, n):
             lp = log_prices[i - 1]
             lp_star = log_p_star_series[i]  # use P* at forecast target date
-            ou_1m[i] = _ou_point_forecast(lp, lp_star, kappa, gamma_annual, HORIZON_1M)
-            gbm_1m[i] = _gbm_median_forecast(lp, mu_monthly, sigma, HORIZON_1M, rng)
+            ou_1m[i] = _ou_point_forecast(
+                lp, lp_star, kappa, gamma_annual, HORIZON_1M)
+            gbm_1m[i] = _gbm_median_forecast(
+                lp, mu_monthly, sigma, HORIZON_1M, rng)
             zg_1m[i] = lp
             rw_1m[i] = _rw_median_forecast(lp, sigma, HORIZON_1M, rng)
 
@@ -177,8 +188,10 @@ def run_model_comparison() -> dict:
         for i in range(HORIZON_12M, n):
             lp = log_prices[i - HORIZON_12M]
             lp_star = log_p_star_series[i]  # use P* at forecast target date
-            ou_12m[i] = _ou_point_forecast(lp, lp_star, kappa, gamma_annual, HORIZON_12M)
-            gbm_12m[i] = _gbm_median_forecast(lp, mu_monthly, sigma, HORIZON_12M, rng)
+            ou_12m[i] = _ou_point_forecast(
+                lp, lp_star, kappa, gamma_annual, HORIZON_12M)
+            gbm_12m[i] = _gbm_median_forecast(
+                lp, mu_monthly, sigma, HORIZON_12M, rng)
             zg_12m[i] = lp
             rw_12m[i] = _rw_median_forecast(lp, sigma, HORIZON_12M, rng)
 
@@ -191,7 +204,8 @@ def run_model_comparison() -> dict:
             a, f = log_prices[mask], fc[mask]
             rmse = float(np.sqrt(np.mean((a - f) ** 2)))
             chg_a = actual_changes[mask]
-            chg_f = f - np.concatenate([[log_prices[0]], log_prices])[:-1][mask]
+            chg_f = f - \
+                np.concatenate([[log_prices[0]], log_prices])[:-1][mask]
             dir_acc = float(np.mean(np.sign(chg_a[1:]) == np.sign(chg_f[1:])))
             return {"rmse": round(rmse, 6), "dir_acc": round(dir_acc, 4)}
 
@@ -207,8 +221,10 @@ def run_model_comparison() -> dict:
                     actual_chg = log_prices[ii] - log_prices[ii - HORIZON_12M]
                     fc_chg = fc[ii] - log_prices[ii - HORIZON_12M]
                     if not np.isnan(fc_chg):
-                        directions_correct.append(np.sign(actual_chg) == np.sign(fc_chg))
-            dir_acc = float(np.mean(directions_correct)) if directions_correct else float("nan")
+                        directions_correct.append(
+                            np.sign(actual_chg) == np.sign(fc_chg))
+            dir_acc = float(np.mean(directions_correct)
+                            ) if directions_correct else float("nan")
             return {"rmse": round(rmse, 6), "dir_acc": round(dir_acc, 4) if not np.isnan(dir_acc) else None}
 
         m_ou_1m = _reg_metrics_1m(ou_1m)
@@ -233,7 +249,7 @@ def run_model_comparison() -> dict:
         }
 
         for model, m1, m12 in [("log_ou", m_ou_1m, m_ou_12m), ("gbm", m_gbm_1m, m_gbm_12m),
-                                 ("zero_growth", m_zg_1m, m_zg_12m), ("random_walk", m_rw_1m, m_rw_12m)]:
+                               ("zero_growth", m_zg_1m, m_zg_12m), ("random_walk", m_rw_1m, m_rw_12m)]:
             pooled[model]["rmse_1m"].append(m1["rmse"])
             pooled[model]["rmse_12m"].append(m12["rmse"])
             pooled[model]["dir_1m"].append(m1["dir_acc"])
@@ -306,7 +322,8 @@ def run_model_comparison() -> dict:
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(json.dumps(output, indent=2), encoding="utf-8")
-    print(f"\nPooled 12m RMSE: OU={ou_12m:.5f}  GBM={gbm_12m:.5f}  ZG={zg_12m:.5f}")
+    print(
+        f"\nPooled 12m RMSE: OU={ou_12m:.5f}  GBM={gbm_12m:.5f}  ZG={zg_12m:.5f}")
     print(f"OU beats GBM at 12m: {ou_beats_gbm_12m}")
     print(f"OU beats ZG  at 12m: {ou_beats_zg_12m}")
     print(f"Saved to {OUTPUT_PATH}")

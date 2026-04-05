@@ -1,18 +1,7 @@
 """Stage 7 entrypoint for the multipage Streamlit dashboard."""
 
 from __future__ import annotations
-
-import os
-import sys
-from pathlib import Path
-
-ROOT_DIR = Path(__file__).resolve().parents[2]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
-
-from src.core.config import load_config
-from src.core.logging_utils import configure_monitoring, get_logger, log_model_event
-from src.ui.pages.limitations import render_limitations
+import streamlit as st
 from src.ui.views import (
     render_comparison_view,
     render_consumer_view,
@@ -22,11 +11,22 @@ from src.ui.views import (
     render_reit_view,
     render_scenario_lab,
 )
+from src.ui.pages.limitations import render_limitations
+from src.core.logging_utils import configure_monitoring, get_logger, log_model_event
+from src.core.config import load_config
+
+import os
+import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 
 # Configure monitoring before any Streamlit calls so the startup event is captured.
 configure_monitoring()
 
-import streamlit as st
 
 _logger = get_logger(__name__)
 
@@ -46,7 +46,8 @@ def main() -> None:
         _handoff_path = STAGE6_OUTPUT_DIR / load_config().artifacts.stage6_handoff_file
         if _handoff_path.exists():
             _hdf = _pd.read_csv(_handoff_path, nrows=1)
-            _scoring_date = str(_hdf["scoring_date"].iloc[0]) if "scoring_date" in _hdf.columns else "unknown"
+            _scoring_date = str(
+                _hdf["scoring_date"].iloc[0]) if "scoring_date" in _hdf.columns else "unknown"
     except Exception:
         _scoring_date = "unknown"
     log_model_event(
@@ -68,14 +69,22 @@ def main() -> None:
 
     pages = {
         "Housing Research Platform": [
-            st.Page(render_home, title="Research Overview", icon=":material/home:"),
-            st.Page(render_reit_view, title="Regional Signals", icon=":material/analytics:"),
-            st.Page(render_comparison_view, title="Region Comparison", icon=":material/compare:"),
-            st.Page(render_scenario_lab, title="Scenario & Diagnostics", icon=":material/tune:"),
-            st.Page(render_consumer_view, title="Household Explorer", icon=":material/person:"),
-            st.Page(render_methodology, title="Methodology", icon=":material/menu_book:"),
-            st.Page(render_model_controls, title="Technical Controls", icon=":material/settings:"),
-            st.Page(render_limitations, title="Limitations", icon=":material/warning:"),
+            st.Page(render_home, title="Research Overview",
+                    icon=":material/home:"),
+            st.Page(render_reit_view, title="Regional Signals",
+                    icon=":material/analytics:"),
+            st.Page(render_comparison_view, title="Region Comparison",
+                    icon=":material/compare:"),
+            st.Page(render_scenario_lab, title="Scenario & Diagnostics",
+                    icon=":material/tune:"),
+            st.Page(render_consumer_view, title="Household Explorer",
+                    icon=":material/person:"),
+            st.Page(render_methodology, title="Methodology",
+                    icon=":material/menu_book:"),
+            st.Page(render_model_controls, title="Technical Controls",
+                    icon=":material/settings:"),
+            st.Page(render_limitations, title="Limitations",
+                    icon=":material/warning:"),
         ]
     }
     nav = st.navigation(pages, position="sidebar")

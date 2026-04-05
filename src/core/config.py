@@ -207,14 +207,18 @@ class HousingModelConfig:
 
         return cls(
             project=ProjectConfig(**_pick(raw["project"], ProjectConfig)),
-            artifacts=ArtifactConfig(**_pick(raw["artifacts"], ArtifactConfig)),
+            artifacts=ArtifactConfig(
+                **_pick(raw["artifacts"], ArtifactConfig)),
             model=ModelConfig(**_pick(raw["model"], ModelConfig)),
             scoring=ScoringConfig(
-                thresholds=ThresholdConfig(**_pick(raw["scoring"]["thresholds"], ThresholdConfig)),
+                thresholds=ThresholdConfig(
+                    **_pick(raw["scoring"]["thresholds"], ThresholdConfig)),
                 consumer_weights=raw["scoring"]["consumer_weights"],
                 reit_weights=raw["scoring"]["reit_weights"],
-                app_consumer_weights=ComponentWeights(**_pick(raw["scoring"]["app_consumer_weights"], ComponentWeights)),
-                app_reit_weights=ReitWeights(**_pick(raw["scoring"]["app_reit_weights"], ReitWeights)),
+                app_consumer_weights=ComponentWeights(
+                    **_pick(raw["scoring"]["app_consumer_weights"], ComponentWeights)),
+                app_reit_weights=ReitWeights(
+                    **_pick(raw["scoring"]["app_reit_weights"], ReitWeights)),
                 scenario_consumer_weights={
                     k: float(v)
                     for k, v in raw["scoring"]["scenario_consumer_weights"].items()
@@ -228,7 +232,8 @@ class HousingModelConfig:
             ),
             ui=UIConfig(**_pick(raw["ui"], UIConfig)),
             controls=ControlsConfig(**_pick(raw["controls"], ControlsConfig)),
-            freshness=FreshnessConfig(**_pick(raw["freshness"], FreshnessConfig)),
+            freshness=FreshnessConfig(
+                **_pick(raw["freshness"], FreshnessConfig)),
             fair_value=FairValueConfig(
                 **_pick({k: v for k, v in raw["fair_value"].items() if k != "sigma_cap_overrides"}, FairValueConfig),
                 sigma_cap_overrides={
@@ -237,10 +242,14 @@ class HousingModelConfig:
                     if not k.startswith("_")
                 },
             ),
-            simulation=SimulationConfig(**_pick(raw["simulation"], SimulationConfig)),
-            validation=ValidationConfig(**_pick(raw["validation"], ValidationConfig)),
-            guardrails=GuardrailsConfig(**_pick(raw["guardrails"], GuardrailsConfig)),
-            scenarios={key: ScenarioPreset(**_pick(value, ScenarioPreset)) for key, value in raw["scenarios"].items()},
+            simulation=SimulationConfig(
+                **_pick(raw["simulation"], SimulationConfig)),
+            validation=ValidationConfig(
+                **_pick(raw["validation"], ValidationConfig)),
+            guardrails=GuardrailsConfig(
+                **_pick(raw["guardrails"], GuardrailsConfig)),
+            scenarios={key: ScenarioPreset(
+                **_pick(value, ScenarioPreset)) for key, value in raw["scenarios"].items()},
         )
 
 

@@ -22,9 +22,9 @@ from scipy.stats import f as f_dist
 _P_STAR_REGRESSORS = ["log_income_asof", "log_rent", "mortgage_rate"]
 
 # Sub-period boundaries (inclusive)
-_PRE_GFC_END      = pd.Timestamp("2008-08-01")
-_POST_GFC_START   = pd.Timestamp("2008-09-01")
-_PRE_COVID_END    = pd.Timestamp("2020-01-01")
+_PRE_GFC_END = pd.Timestamp("2008-08-01")
+_POST_GFC_START = pd.Timestamp("2008-09-01")
+_PRE_COVID_END = pd.Timestamp("2020-01-01")
 _POST_COVID_START = pd.Timestamp("2020-02-01")
 
 _BREAK_LABEL = "2008-09 & 2020-02"
@@ -89,7 +89,8 @@ def run_chow_tests(panel_df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         sub = df[["date", dep_var, regressor]].dropna().reset_index(drop=True)
 
         mask1 = sub["date"] <= _PRE_GFC_END
-        mask2 = (sub["date"] >= _POST_GFC_START) & (sub["date"] <= _PRE_COVID_END)
+        mask2 = (sub["date"] >= _POST_GFC_START) & (
+            sub["date"] <= _PRE_COVID_END)
         mask3 = sub["date"] >= _POST_COVID_START
 
         y_full = sub[dep_var].to_numpy()
@@ -98,12 +99,12 @@ def run_chow_tests(panel_df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         k = 2  # constant + 1 regressor
 
         rss_full = _ols_rss(y_full, X_full)
-        rss_1    = _ols_rss(sub.loc[mask1, dep_var].to_numpy(),
-                            sub.loc[mask1, [regressor]].to_numpy())
-        rss_2    = _ols_rss(sub.loc[mask2, dep_var].to_numpy(),
-                            sub.loc[mask2, [regressor]].to_numpy())
-        rss_3    = _ols_rss(sub.loc[mask3, dep_var].to_numpy(),
-                            sub.loc[mask3, [regressor]].to_numpy())
+        rss_1 = _ols_rss(sub.loc[mask1, dep_var].to_numpy(),
+                         sub.loc[mask1, [regressor]].to_numpy())
+        rss_2 = _ols_rss(sub.loc[mask2, dep_var].to_numpy(),
+                         sub.loc[mask2, [regressor]].to_numpy())
+        rss_3 = _ols_rss(sub.loc[mask3, dep_var].to_numpy(),
+                         sub.loc[mask3, [regressor]].to_numpy())
 
         if any(np.isnan(v) for v in [rss_full, rss_1, rss_2, rss_3]):
             records.append({
@@ -116,14 +117,14 @@ def run_chow_tests(panel_df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
             continue
 
         rss_sub = rss_1 + rss_2 + rss_3
-        df_num  = k
-        df_den  = n - 3 * k
+        df_num = k
+        df_den = n - 3 * k
 
         if df_den <= 0 or rss_sub <= 0:
-            f_stat  = np.nan
+            f_stat = np.nan
             p_value = np.nan
         else:
-            f_stat  = ((rss_full - rss_sub) / df_num) / (rss_sub / df_den)
+            f_stat = ((rss_full - rss_sub) / df_num) / (rss_sub / df_den)
             p_value = float(f_dist.sf(max(f_stat, 0.0), df_num, df_den))
 
         records.append({

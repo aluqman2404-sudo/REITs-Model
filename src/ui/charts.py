@@ -1,6 +1,11 @@
 """Matplotlib charts for the Stage 7 research dashboard."""
 
 from __future__ import annotations
+from src.ui.formatters import band_colour
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib
 
 import os
 import tempfile
@@ -9,15 +14,9 @@ _CACHE_ROOT = os.path.join(tempfile.gettempdir(), "uk_housing_stage7")
 os.makedirs(_CACHE_ROOT, exist_ok=True)
 os.environ.setdefault("MPLCONFIGDIR", _CACHE_ROOT)
 
-import matplotlib
 
 matplotlib.use("Agg")
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-
-from src.ui.formatters import band_colour
 
 INK = "#12355b"
 TEAL = "#0f766e"
@@ -38,13 +37,19 @@ def _style_axes(ax) -> None:
 
 
 def fan_chart(history: pd.DataFrame, forecast: pd.DataFrame, region: str, scenario_name: str):
-    future_months = pd.date_range(history["date"].max(), periods=len(forecast), freq="MS")
+    future_months = pd.date_range(
+        history["date"].max(), periods=len(forecast), freq="MS")
     fig, ax = plt.subplots(figsize=(10, 5.2))
-    ax.plot(history["date"], history["nominal_house_price"], color=INK, lw=2, label="Historical price")
-    ax.fill_between(future_months, forecast["p10"], forecast["p90"], color=SKY, alpha=0.25, label="10-90 range")
-    ax.fill_between(future_months, forecast["p25"], forecast["p75"], color="#3182ce", alpha=0.25, label="25-75 range")
-    ax.plot(future_months, forecast["p50"], color=TEAL, lw=2.5, label="Median path")
-    ax.set_title(f"{region}: historical and simulated price path", fontsize=12, loc="left")
+    ax.plot(history["date"], history["nominal_house_price"],
+            color=INK, lw=2, label="Historical price")
+    ax.fill_between(
+        future_months, forecast["p10"], forecast["p90"], color=SKY, alpha=0.25, label="10-90 range")
+    ax.fill_between(future_months, forecast["p25"], forecast["p75"],
+                    color="#3182ce", alpha=0.25, label="25-75 range")
+    ax.plot(future_months, forecast["p50"],
+            color=TEAL, lw=2.5, label="Median path")
+    ax.set_title(f"{region}: historical and simulated price path",
+                 fontsize=12, loc="left")
     ax.set_xlabel("Date")
     ax.set_ylabel("Nominal average price (GBP)")
     ax.legend(frameon=False, ncol=3)
@@ -64,7 +69,8 @@ def fan_chart(history: pd.DataFrame, forecast: pd.DataFrame, region: str, scenar
 def score_breakdown_chart(component_scores: dict[str, float], title: str):
     labels = [name.replace("_", " ").title() for name in component_scores]
     values = list(component_scores.values())
-    colours = ["#1f7a45" if v >= 67 else "#b26a00" if v >= 40 else "#a63f3f" for v in values]
+    colours = ["#1f7a45" if v >= 67 else "#b26a00" if v >=
+               40 else "#a63f3f" for v in values]
     fig, ax = plt.subplots(figsize=(7, 3.2))
     ax.barh(labels, values, color=colours)
     for idx, value in enumerate(values):
@@ -83,7 +89,8 @@ def affordability_gauge(score: float, title: str):
     ax.barh([0], [100], color="#e5e7eb", height=0.45)
     colour = "#1f7a45" if score >= 67 else "#b26a00" if score >= 40 else "#a63f3f"
     ax.barh([0], [score], color=colour, height=0.45)
-    ax.text(score + 1.5, 0, f"{score:.0f}/100", va="center", fontsize=11, fontweight="bold")
+    ax.text(score + 1.5, 0, f"{score:.0f}/100",
+            va="center", fontsize=11, fontweight="bold")
     ax.set_xlim(0, 110)
     ax.set_yticks([])
     ax.set_xlabel("Affordability")
@@ -142,12 +149,15 @@ def regional_rank_chart(region_table: pd.DataFrame, score_col: str, selected_reg
 def yield_risk_chart(region_table: pd.DataFrame, selected_region: str):
     fig, ax = plt.subplots(figsize=(7.5, 4.6))
     colours = [band_colour(label) for label in region_table["reit_band"]]
-    sizes = [180 if region == selected_region else 80 for region in region_table["region"]]
-    scatter = ax.scatter(region_table["gross_yield_pct"], region_table["p_terminal_loss_10_avg"], c=colours, s=sizes, alpha=0.8, edgecolors=INK)
+    sizes = [180 if region ==
+             selected_region else 80 for region in region_table["region"]]
+    scatter = ax.scatter(region_table["gross_yield_pct"],
+                         region_table["p_terminal_loss_10_avg"], c=colours, s=sizes, alpha=0.8, edgecolors=INK)
     del scatter
     for _, row in region_table.iterrows():
         if row["region"] == selected_region:
-            ax.annotate(row["region"], (row["gross_yield_pct"], row["p_terminal_loss_10_avg"]), xytext=(6, 6), textcoords="offset points", fontsize=9)
+            ax.annotate(row["region"], (row["gross_yield_pct"], row["p_terminal_loss_10_avg"]), xytext=(
+                6, 6), textcoords="offset points", fontsize=9)
     ax.set_xlabel("Current gross yield (%)")
     ax.set_ylabel("P(terminal loss >10%)")
     ax.set_title("Yield versus downside risk", fontsize=12, loc="left")
@@ -171,9 +181,11 @@ def terminal_distribution_chart(paths: pd.DataFrame, start_price: float, title: 
 
 
 def tail_risk_heatmap(simulation: pd.DataFrame):
-    pivot = simulation.pivot(index="region", columns="scenario", values="prob_terminal_loss_10pct")
+    pivot = simulation.pivot(
+        index="region", columns="scenario", values="prob_terminal_loss_10pct")
     fig, ax = plt.subplots(figsize=(8.5, 5.2))
-    im = ax.imshow(pivot.values, cmap="RdYlGn_r", aspect="auto", vmin=0, vmax=1)
+    im = ax.imshow(pivot.values, cmap="RdYlGn_r",
+                   aspect="auto", vmin=0, vmax=1)
     ax.set_xticks(range(len(pivot.columns)))
     ax.set_xticklabels(pivot.columns, rotation=25, ha="right")
     ax.set_yticks(range(len(pivot.index)))
@@ -259,7 +271,8 @@ def plot_region_comparison(
     for i, region in enumerate(regions[:4]):
         colour = _COMPARISON_COLOURS[i % len(_COMPARISON_COLOURS)]
         subset = (
-            panel_df[(panel_df["region"] == region) & (panel_df["date"] >= start_date)]
+            panel_df[(panel_df["region"] == region) &
+                     (panel_df["date"] >= start_date)]
             .sort_values("date")
             .dropna(subset=[col])
         )
@@ -300,7 +313,8 @@ def plot_region_comparison(
         ax.set_ylabel(metric)
 
     ax.set_xlabel("Date")
-    ax.set_title(f"{metric} \u2014 regional comparison", fontsize=12, loc="left")
+    ax.set_title(f"{metric} \u2014 regional comparison",
+                 fontsize=12, loc="left")
     ax.legend(frameon=False, ncol=min(len(regions), 4))
     _style_axes(ax)
     ax.grid(color=GRID, linewidth=0.6, alpha=0.3)
@@ -311,16 +325,20 @@ def plot_region_comparison(
 def historical_vs_simulated_distribution_chart(distribution: pd.DataFrame, region: str):
     subset = distribution[distribution["region"] == region].copy()
     ordered = ["p10", "p25", "p50", "p75", "p90"]
-    subset["percentile"] = pd.Categorical(subset["percentile"], categories=ordered, ordered=True)
+    subset["percentile"] = pd.Categorical(
+        subset["percentile"], categories=ordered, ordered=True)
     subset = subset.sort_values("percentile")
 
     fig, ax = plt.subplots(figsize=(7.8, 4.2))
-    ax.plot(subset["percentile"].astype(str), subset["historical_return_pct"], marker="o", lw=2, color=INK, label="Historical realised 5y")
-    ax.plot(subset["percentile"].astype(str), subset["simulated_return_pct"], marker="o", lw=2, color=TEAL, label="Simulated baseline 5y")
+    ax.plot(subset["percentile"].astype(str), subset["historical_return_pct"],
+            marker="o", lw=2, color=INK, label="Historical realised 5y")
+    ax.plot(subset["percentile"].astype(str), subset["simulated_return_pct"],
+            marker="o", lw=2, color=TEAL, label="Simulated baseline 5y")
     ax.axhline(0.0, color="#94a3b8", lw=1, linestyle="--")
     ax.set_xlabel("Percentile")
     ax.set_ylabel("5-year return (%)")
-    ax.set_title(f"{region}: historical vs simulated 5-year distribution", fontsize=12, loc="left")
+    ax.set_title(
+        f"{region}: historical vs simulated 5-year distribution", fontsize=12, loc="left")
     ax.legend(frameon=False)
     _style_axes(ax)
     ax.grid(axis="y", color=GRID, linewidth=0.6, alpha=0.6)

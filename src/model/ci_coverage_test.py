@@ -32,8 +32,10 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 PANEL_PATH = ROOT / "data" / "processed" / "master_dataset_canonical.csv"
-FAIR_VALUE_PATH = ROOT / "data" / "outputs" / "stage4_final" / "fair_value_panel_bankgrade.csv"
-SDE_PARAMS_PATH = ROOT / "data" / "outputs" / "stage4_final" / "sde_parameters_bankgrade.csv"
+FAIR_VALUE_PATH = ROOT / "data" / "outputs" / \
+    "stage4_final" / "fair_value_panel_bankgrade.csv"
+SDE_PARAMS_PATH = ROOT / "data" / "outputs" / \
+    "stage4_final" / "sde_parameters_bankgrade.csv"
 OUTPUT_DIR = ROOT / "data" / "outputs" / "validation"
 OUTPUT_PATH = OUTPUT_DIR / "ci_coverage_test.json"
 
@@ -63,8 +65,10 @@ def run_ci_coverage_test() -> dict:
         gamma_annual = float(row["gamma_annual_pp"]) / 100.0
 
         # Fair value panel for this region (in-sample OLS P*)
-        fv_reg = fv_panel[fv_panel["region"] == region].sort_values("date").reset_index(drop=True)
-        pan_reg = panel[panel["region"] == region].sort_values("date").reset_index(drop=True)
+        fv_reg = fv_panel[fv_panel["region"] == region].sort_values(
+            "date").reset_index(drop=True)
+        pan_reg = panel[panel["region"] == region].sort_values(
+            "date").reset_index(drop=True)
 
         # Merge on date to align actual prices with fair values
         merged = pd.merge(
@@ -73,9 +77,11 @@ def run_ci_coverage_test() -> dict:
             on="date", how="inner"
         ).sort_values("date").reset_index(drop=True)
 
-        holdout = merged[merged["date"] >= HOLDOUT_START].reset_index(drop=True)
+        holdout = merged[merged["date"] >=
+                         HOLDOUT_START].reset_index(drop=True)
         if len(holdout) < 6:
-            print(f"  {region}: insufficient holdout data ({len(holdout)} obs) — skipping")
+            print(
+                f"  {region}: insufficient holdout data ({len(holdout)} obs) — skipping")
             continue
 
         # Compute log-gap: x_t = log(P_t) - log(P*_t)
@@ -103,7 +109,8 @@ def run_ci_coverage_test() -> dict:
                 inside_count += 1
             total_count += 1
 
-        coverage = float(inside_count / total_count) if total_count > 0 else float("nan")
+        coverage = float(
+            inside_count / total_count) if total_count > 0 else float("nan")
         regional_coverage[region] = round(coverage, 4)
         print(f"  {region:35s}: coverage={coverage:.3f}  (n={total_count})")
 
@@ -150,7 +157,8 @@ def run_ci_coverage_test() -> dict:
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(json.dumps(output, indent=2), encoding="utf-8")
-    print(f"\nPooled 1-step-ahead CI coverage: {pooled_coverage:.4f}  (passes={pooled_passes})")
+    print(
+        f"\nPooled 1-step-ahead CI coverage: {pooled_coverage:.4f}  (passes={pooled_passes})")
     print(f"Saved to {OUTPUT_PATH}")
     return output
 

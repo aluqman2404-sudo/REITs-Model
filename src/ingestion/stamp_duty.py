@@ -74,19 +74,19 @@ def calculate_sdlt(
     use_ftb = first_time_buyer and price <= 625_000
 
     if use_ftb:
-        bands     = _build_ftb_bands(price)
+        bands = _build_ftb_bands(price)
         buyer_type = "First-time buyer"
     else:
-        bands      = _STANDARD_BANDS
+        bands = _STANDARD_BANDS
         buyer_type = "Standard"
 
     total, breakdown = _apply_bands(price, bands)
 
     # Surcharges are applied on top of the base SDLT
     if additional_dwelling:
-        surcharge   = price * _ADDITIONAL_SURCHARGE
-        total      += surcharge
-        buyer_type  = "Additional dwelling"
+        surcharge = price * _ADDITIONAL_SURCHARGE
+        total += surcharge
+        buyer_type = "Additional dwelling"
         breakdown.append({
             "band":    "Additional dwelling surcharge",
             "rate":    _ADDITIONAL_SURCHARGE,
@@ -95,8 +95,8 @@ def calculate_sdlt(
         })
 
     if non_uk_resident:
-        nr_charge  = price * _NON_RESIDENT_SURCHARGE
-        total     += nr_charge
+        nr_charge = price * _NON_RESIDENT_SURCHARGE
+        total += nr_charge
         breakdown.append({
             "band":    "Non-UK resident surcharge",
             "rate":    _NON_RESIDENT_SURCHARGE,
@@ -105,11 +105,11 @@ def calculate_sdlt(
         })
 
     return SDLTResult(
-        property_price = price,
-        sdlt_total     = round(total, 2),
-        effective_rate = round(total / price, 6) if price > 0 else 0.0,
-        breakdown      = breakdown,
-        buyer_type     = buyer_type,
+        property_price=price,
+        sdlt_total=round(total, 2),
+        effective_rate=round(total / price, 6) if price > 0 else 0.0,
+        breakdown=breakdown,
+        buyer_type=buyer_type,
     )
 
 
@@ -148,7 +148,7 @@ def _build_ftb_bands(price: float) -> list[tuple]:
 
 def _apply_bands(price: float, bands: list[tuple]) -> tuple[float, list[dict]]:
     """Apply SDLT bands to a price and return total tax and per-band breakdown."""
-    total     = 0.0
+    total = 0.0
     breakdown = []
     prev_limit = 0
 
@@ -156,10 +156,10 @@ def _apply_bands(price: float, bands: list[tuple]) -> tuple[float, list[dict]]:
         if price <= prev_limit:
             break
 
-        ceiling    = upper if upper is not None else float("inf")
-        taxable    = min(price, ceiling) - prev_limit
-        tax        = taxable * rate
-        total     += tax
+        ceiling = upper if upper is not None else float("inf")
+        taxable = min(price, ceiling) - prev_limit
+        tax = taxable * rate
+        total += tax
 
         breakdown.append({
             "band":    f"£{prev_limit:,} – £{upper:,}" if upper else f"Above £{prev_limit:,}",

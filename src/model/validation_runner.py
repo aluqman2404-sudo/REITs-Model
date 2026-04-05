@@ -36,7 +36,6 @@ OUTPUT FILES
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -51,19 +50,19 @@ STAGE4_DIR = ROOT / "data" / "outputs" / "stage4_final"
 STAGE6_DIR = ROOT / "data" / "outputs" / "stage6"
 VALIDATION_DIR = ROOT / "data" / "outputs" / "validation"
 
-SDE_PARAMS_FILE   = STAGE4_DIR / "sde_parameters_bankgrade.csv"
-PANEL_FILE        = STAGE4_DIR / "fair_value_panel_bankgrade.csv"
-HANDOFF_FILE      = STAGE6_DIR / "stage7_handoff_bankgrade.csv"
+SDE_PARAMS_FILE = STAGE4_DIR / "sde_parameters_bankgrade.csv"
+PANEL_FILE = STAGE4_DIR / "fair_value_panel_bankgrade.csv"
+HANDOFF_FILE = STAGE6_DIR / "stage7_handoff_bankgrade.csv"
 
-RESULTS_FILE      = VALIDATION_DIR / "independent_validation_results.csv"
-SUMMARY_FILE      = VALIDATION_DIR / "independent_validation_summary.csv"
-SCORE_IR_FILE     = VALIDATION_DIR / "score_ir_summary.csv"
+RESULTS_FILE = VALIDATION_DIR / "independent_validation_results.csv"
+SUMMARY_FILE = VALIDATION_DIR / "independent_validation_summary.csv"
+SCORE_IR_FILE = VALIDATION_DIR / "score_ir_summary.csv"
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-HORIZONS             = [1, 3, 6, 12]    # months ahead
-VALIDATION_MONTHS    = 24               # last N months of panel used for evaluation
+HORIZONS = [1, 3, 6, 12]    # months ahead
+VALIDATION_MONTHS = 24               # last N months of panel used for evaluation
 TRAILING_MEAN_WINDOW = 12               # months for the trailing-mean benchmark
 
 # Beta name in sde_parameters → feature column in fair_value_panel
@@ -77,8 +76,8 @@ FEATURE_MAP: dict[str, str] = {
 }
 
 SUPPORTIVE_THRESHOLD = 55.0  # consumer_score >= this → Supportive
-CAUTIOUS_THRESHOLD   = 45.0  # consumer_score <  this → Cautious
-IR_HORIZONS          = [12, 36]
+CAUTIOUS_THRESHOLD = 45.0  # consumer_score <  this → Cautious
+IR_HORIZONS = [12, 36]
 
 
 # ---------------------------------------------------------------------------
@@ -86,8 +85,8 @@ IR_HORIZONS          = [12, 36]
 # ---------------------------------------------------------------------------
 
 def load_artifacts() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    params  = pd.read_csv(SDE_PARAMS_FILE)
-    panel   = pd.read_csv(PANEL_FILE, parse_dates=["date"])
+    params = pd.read_csv(SDE_PARAMS_FILE)
+    panel = pd.read_csv(PANEL_FILE, parse_dates=["date"])
     handoff = pd.read_csv(HANDOFF_FILE)
     return params, panel, handoff
 
@@ -100,7 +99,7 @@ def _trailing_mean(growth: np.ndarray, i: int, window: int) -> float:
     """Mean of the `window` monthly returns ending at i-1 (no look-ahead)."""
     if i < window:
         return np.nan
-    segment = growth[i - window : i]
+    segment = growth[i - window: i]
     if np.all(np.isnan(segment)):
         return np.nan
     return float(np.nanmean(segment))
@@ -128,8 +127,8 @@ def build_forecast_results(
             continue
 
         coef = params_idx.loc[region]
-        grp  = grp.sort_values("date").reset_index(drop=True)
-        n    = len(grp)
+        grp = grp.sort_values("date").reset_index(drop=True)
+        n = len(grp)
 
         growth = grp["price_growth"].to_numpy(dtype=float)
 
@@ -160,7 +159,7 @@ def build_forecast_results(
                     predicted += float(coef[beta_col]) * val
 
             # --- Benchmarks at time t ---
-            bm_ar1   = growth_lag1[i]          # NaN if i == 0
+            bm_ar1 = growth_lag1[i]          # NaN if i == 0
             bm_trail = _trailing_mean(growth, i, TRAILING_MEAN_WINDOW)
 
             # --- Compare to actual at each horizon ---
@@ -180,7 +179,7 @@ def build_forecast_results(
                     "actual_growth":           round(actual, 6),
                     "error":                   round(predicted - actual, 6),
                     "benchmark_zero":          0.0,
-                    "benchmark_ar1":           round(bm_ar1, 6)   if not np.isnan(bm_ar1)   else np.nan,
+                    "benchmark_ar1":           round(bm_ar1, 6) if not np.isnan(bm_ar1) else np.nan,
                     "benchmark_trailing_mean": round(bm_trail, 6) if not np.isnan(bm_trail) else np.nan,
                     "features_omitted":        "beta_supply,beta_affordability",
                 })
@@ -215,15 +214,15 @@ def compute_summary(results: pd.DataFrame) -> pd.DataFrame:
     for h in HORIZONS:
         sub = results[results["horizon"] == h].copy()
         sub = sub.dropna(subset=["actual_growth", "predicted_growth",
-                                  "benchmark_ar1", "benchmark_trailing_mean"])
+                                 "benchmark_ar1", "benchmark_trailing_mean"])
         if sub.empty:
             continue
 
-        actual    = sub["actual_growth"].values
+        actual = sub["actual_growth"].values
         predicted = sub["predicted_growth"].values
-        zero      = np.zeros_like(actual)
-        ar1       = sub["benchmark_ar1"].values
-        trail     = sub["benchmark_trailing_mean"].values
+        zero = np.zeros_like(actual)
+        ar1 = sub["benchmark_ar1"].values
+        trail = sub["benchmark_trailing_mean"].values
 
         overall_rows.append({
             "report_type":           "overall",
@@ -272,7 +271,7 @@ def compute_summary(results: pd.DataFrame) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 def _compound_forward_return(growth: np.ndarray, i: int, h: int) -> float:
-    window = growth[i + 1 : i + 1 + h]
+    window = growth[i + 1: i + 1 + h]
     if len(window) < h or np.any(np.isnan(window)):
         return np.nan
     return float(np.prod(1.0 + window) - 1.0)
@@ -290,7 +289,7 @@ def compute_score_ir(panel: pd.DataFrame, handoff: pd.DataFrame) -> pd.DataFrame
     """
     score_map = handoff.set_index("region")["consumer_score"].to_dict()
     supportive = {r for r, s in score_map.items() if s >= SUPPORTIVE_THRESHOLD}
-    cautious   = {r for r, s in score_map.items() if s <  CAUTIOUS_THRESHOLD}
+    cautious = {r for r, s in score_map.items() if s < CAUTIOUS_THRESHOLD}
 
     rows: list[dict] = []
 
@@ -299,9 +298,9 @@ def compute_score_ir(panel: pd.DataFrame, handoff: pd.DataFrame) -> pd.DataFrame
         cau_returns: list[float] = []
 
         for region, grp in panel.groupby("region"):
-            grp    = grp.sort_values("date").reset_index(drop=True)
+            grp = grp.sort_values("date").reset_index(drop=True)
             growth = grp["price_growth"].to_numpy(dtype=float)
-            n      = len(grp)
+            n = len(grp)
 
             for i in range(n):
                 fwd = _compound_forward_return(growth, i, h)
@@ -320,7 +319,8 @@ def compute_score_ir(panel: pd.DataFrame, handoff: pd.DataFrame) -> pd.DataFrame
 
         if len(sup_arr) > 0 and len(cau_arr) > 0:
             pooled_std = float(np.std(np.concatenate([sup_arr, cau_arr])))
-            ir = (mean_sup - mean_cau) / pooled_std if pooled_std > 0 else np.nan
+            ir = (mean_sup - mean_cau) / \
+                pooled_std if pooled_std > 0 else np.nan
         else:
             pooled_std = np.nan
             ir = np.nan
@@ -331,10 +331,10 @@ def compute_score_ir(panel: pd.DataFrame, handoff: pd.DataFrame) -> pd.DataFrame
             "n_cautious_regions":     len(cautious),
             "n_supportive_obs":       len(sup_arr),
             "n_cautious_obs":         len(cau_arr),
-            "mean_return_supportive": round(mean_sup, 6)    if not np.isnan(mean_sup)    else np.nan,
-            "mean_return_cautious":   round(mean_cau, 6)    if not np.isnan(mean_cau)    else np.nan,
-            "pooled_std":             round(pooled_std, 6)  if not np.isnan(pooled_std)  else np.nan,
-            "ir":                     round(ir, 4)          if not np.isnan(ir)          else np.nan,
+            "mean_return_supportive": round(mean_sup, 6) if not np.isnan(mean_sup) else np.nan,
+            "mean_return_cautious":   round(mean_cau, 6) if not np.isnan(mean_cau) else np.nan,
+            "pooled_std":             round(pooled_std, 6) if not np.isnan(pooled_std) else np.nan,
+            "ir":                     round(ir, 4) if not np.isnan(ir) else np.nan,
             "note": (
                 "No cautious regions at current thresholds (supportive>=55, cautious<45); "
                 "IR not computable."
@@ -351,7 +351,8 @@ def compute_score_ir(panel: pd.DataFrame, handoff: pd.DataFrame) -> pd.DataFrame
 
 def print_summary(summary: pd.DataFrame, score_ir: pd.DataFrame) -> None:
     overall = summary[summary["report_type"] == "overall"].copy()
-    by_region = summary[summary["report_type"] == "directional_accuracy_by_region"].copy()
+    by_region = summary[summary["report_type"] ==
+                        "directional_accuracy_by_region"].copy()
 
     width = 76
     print("\n" + "=" * width)
@@ -372,22 +373,28 @@ def print_summary(summary: pd.DataFrame, score_ir: pd.DataFrame) -> None:
         )
 
     # Per-region directional accuracy at h=1 (most interpretable)
-    h1 = by_region[by_region["horizon"] == 1].sort_values("directional_accuracy", ascending=False)
+    h1 = by_region[by_region["horizon"] == 1].sort_values(
+        "directional_accuracy", ascending=False)
     if not h1.empty:
-        print(f"\nDirectional accuracy by region (h=1):")
+        print("\nDirectional accuracy by region (h=1):")
         for _, r in h1.iterrows():
-            print(f"  {r['region']:<30} {r['directional_accuracy']:.3f}  (n={int(r['n_obs'])})")
+            print(
+                f"  {r['region']:<30} {r['directional_accuracy']:.3f}  (n={int(r['n_obs'])})")
 
     # Score IR
-    print(f"\nScore IR (consumer_score ≥{SUPPORTIVE_THRESHOLD:.0f} vs <{CAUTIOUS_THRESHOLD:.0f}):")
+    print(
+        f"\nScore IR (consumer_score ≥{SUPPORTIVE_THRESHOLD:.0f} vs <{CAUTIOUS_THRESHOLD:.0f}):")
     h_col = f"{'H':>6}"
     print(f"{h_col} {'N_Sup_Reg':>10} {'N_Cau_Reg':>10} {'Mean_Sup':>10} {'Mean_Cau':>10} {'Pooled_Std':>12} {'IR':>8}")
     print("-" * 72)
     for _, r in score_ir.iterrows():
-        mean_sup = f"{r['mean_return_supportive']:.4f}" if not pd.isna(r["mean_return_supportive"]) else "   N/A"
-        mean_cau = f"{r['mean_return_cautious']:.4f}"   if not pd.isna(r["mean_return_cautious"])   else "   N/A"
-        std_s    = f"{r['pooled_std']:.4f}"             if not pd.isna(r["pooled_std"])             else "   N/A"
-        ir_s     = f"{r['ir']:.4f}"                     if not pd.isna(r["ir"])                     else "   N/A"
+        mean_sup = f"{r['mean_return_supportive']:.4f}" if not pd.isna(
+            r["mean_return_supportive"]) else "   N/A"
+        mean_cau = f"{r['mean_return_cautious']:.4f}" if not pd.isna(
+            r["mean_return_cautious"]) else "   N/A"
+        std_s = f"{r['pooled_std']:.4f}" if not pd.isna(
+            r["pooled_std"]) else "   N/A"
+        ir_s = f"{r['ir']:.4f}" if not pd.isna(r["ir"]) else "   N/A"
         print(
             f"{int(r['horizon_months']):>6} {int(r['n_supportive_regions']):>10}"
             f" {int(r['n_cautious_regions']):>10} {mean_sup:>10}"
@@ -409,14 +416,17 @@ def run() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     print("Loading artifacts (no src/ imports)…")
     params, panel, handoff = load_artifacts()
     print(f"  sde_parameters : {len(params)} regions")
-    print(f"  fair_value_panel: {len(panel)} rows  {panel['date'].min().date()} – {panel['date'].max().date()}")
-    print(f"  handoff        : {len(handoff)} regions  scoring_date={handoff['scoring_date'].iloc[0]}")
     print(
-        f"  Omitted betas  : beta_supply (approvals_growth), "
-        f"beta_affordability (affordability_gap_lag1) — not in panel"
+        f"  fair_value_panel: {len(panel)} rows  {panel['date'].min().date()} – {panel['date'].max().date()}")
+    print(
+        f"  handoff        : {len(handoff)} regions  scoring_date={handoff['scoring_date'].iloc[0]}")
+    print(
+        "  Omitted betas  : beta_supply (approvals_growth), "
+        "beta_affordability (affordability_gap_lag1) — not in panel"
     )
 
-    print("\n[1/4] Building forecast results (last 24 months × 12 regions × 4 horizons)…")
+    print(
+        "\n[1/4] Building forecast results (last 24 months × 12 regions × 4 horizons)…")
     results = build_forecast_results(params, panel)
     results.to_csv(RESULTS_FILE, index=False)
     print(f"       {len(results)} rows → {RESULTS_FILE.name}")

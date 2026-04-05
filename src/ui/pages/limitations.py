@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from pathlib import Path
 
 import streamlit as st
 
@@ -39,10 +38,10 @@ def _load_panel_metadata() -> dict:
 def render_limitations() -> None:
     """Render the Limitations & Disclosures page."""
 
-    meta         = _load_panel_metadata()
-    panel_start  = meta.get("panel_start", "2005-01-01")
-    panel_end    = meta.get("panel_end",   "2025-10-01")
-    effective    = meta.get("effective_data_as_of", panel_end)
+    meta = _load_panel_metadata()
+    panel_start = meta.get("panel_start", "2005-01-01")
+    panel_end = meta.get("panel_end",   "2025-10-01")
+    effective = meta.get("effective_data_as_of", panel_end)
 
     # -----------------------------------------------------------------------
     # Title and subtitle

@@ -23,7 +23,6 @@ Sources:
 
 import io
 import re
-import time
 import requests
 import pandas as pd
 from datetime import datetime
@@ -37,7 +36,7 @@ _HEADERS = {
     )
 }
 
-_REGIONS    = PARAMS["project"]["regions"]
+_REGIONS = PARAMS["project"]["regions"]
 _START_YEAR = PARAMS["project"]["base_year"]
 
 # ONS PIPR historical series dataset page — scraped for latest Excel URL
@@ -76,7 +75,8 @@ _PIPR_REGION_MAP = {
     "East Midlands":               "East Midlands",
     "West Midlands":               "West Midlands",
     "East of England":             "East of England",
-    "East":                        "East of England",   # Excel sometimes truncates this
+    # Excel sometimes truncates this
+    "East":                        "East of England",
     "London":                      "London",
     "South East":                  "South East",
     "South West":                  "South West",
@@ -116,7 +116,7 @@ def fetch_ons_rental_index(save: bool = True) -> pd.DataFrame:
     # Method 1: Scrape ONS dataset page for latest Excel URL
     try:
         url = _find_latest_pipr_url()
-        df  = _download_and_parse_pipr(url)
+        df = _download_and_parse_pipr(url)
         print(f"  Source: ONS PIPR historical series Excel ({len(df)} rows)")
     except Exception as e:
         print(f"  Latest URL scrape failed ({e}). Trying known direct URL...")
@@ -219,18 +219,24 @@ def compute_rental_yield(
     Returns:
         DataFrame with columns: date, region, gross_yield_pct
     """
-    rents  = rental_levels.copy()
+    rents = rental_levels.copy()
     prices = house_prices[["date", "region", "average_price"]].copy()
 
-    rents["date"]  = pd.to_datetime(rents["date"]).dt.to_period("Q").dt.to_timestamp()
-    prices["date"] = pd.to_datetime(prices["date"]).dt.to_period("Q").dt.to_timestamp()
+    rents["date"] = pd.to_datetime(
+        rents["date"]).dt.to_period("Q").dt.to_timestamp()
+    prices["date"] = pd.to_datetime(
+        prices["date"]).dt.to_period("Q").dt.to_timestamp()
 
-    prices_q = prices.groupby(["date", "region"])["average_price"].mean().reset_index()
-    rents_q  = rents.groupby(["date", "region"])["median_monthly_rent"].mean().reset_index()
+    prices_q = prices.groupby(["date", "region"])[
+                              "average_price"].mean().reset_index()
+    rents_q = rents.groupby(["date", "region"])[
+                            "median_monthly_rent"].mean().reset_index()
 
     merged = rents_q.merge(prices_q, on=["date", "region"], how="inner")
-    merged["gross_yield_pct"] = (merged["median_monthly_rent"] * 12) / merged["average_price"] * 100
-    merged = merged[["date", "region", "gross_yield_pct"]].sort_values(["region", "date"])
+    merged["gross_yield_pct"] = (
+        merged["median_monthly_rent"] * 12) / merged["average_price"] * 100
+    merged = merged[["date", "region", "gross_yield_pct"]
+                    ].sort_values(["region", "date"])
 
     if save:
         path = DATA_RAW / f"rental_yield_{datetime.today():%Y%m}.csv"
@@ -281,7 +287,8 @@ def _download_and_parse_pipr(url: str) -> pd.DataFrame:
     r = requests.get(url, headers=_HEADERS, timeout=90)
     r.raise_for_status()
 
-    raw = pd.read_excel(io.BytesIO(r.content), sheet_name="Table 1", header=None)
+    raw = pd.read_excel(io.BytesIO(r.content),
+                        sheet_name="Table 1", header=None)
 
     # Find the region-name header row: first row where col 1 contains a known region
     header_row_idx = None
@@ -337,12 +344,14 @@ def _download_and_parse_pipr(url: str) -> pd.DataFrame:
                 continue
             try:
                 val = float(str(val_raw).replace(",", ""))
-                records.append({"date": date, "region": region, "rental_index": val})
+                records.append(
+                    {"date": date, "region": region, "rental_index": val})
             except (ValueError, TypeError):
                 continue
 
     if not records:
-        raise ValueError("No data rows parsed from PIPR historical series Excel")
+        raise ValueError(
+            "No data rows parsed from PIPR historical series Excel")
 
     df = pd.DataFrame(records)
     return df.sort_values(["region", "date"]).reset_index(drop=True)
@@ -354,7 +363,7 @@ def _rental_index_placeholder() -> pd.DataFrame:
     Only used when both ONS download methods fail.
     """
     dates = pd.date_range("2000-01-01", "2026-01-01", freq="MS")
-    rows  = []
+    rows = []
     for region in _REGIONS:
         for d in dates:
             months_from_ref = (d.year - 2015) * 12 + (d.month - 1)
@@ -363,14 +372,16 @@ def _rental_index_placeholder() -> pd.DataFrame:
             else:
                 annual_growth = 0.08
             idx = 100.0 * ((1 + annual_growth) ** (months_from_ref / 12))
-            rows.append({"date": d, "region": region, "rental_index": round(idx, 2)})
+            rows.append({"date": d, "region": region,
+                        "rental_index": round(idx, 2)})
     return pd.DataFrame(rows)
 
 
 def _load_pipr_index() -> pd.DataFrame:
     """Load the PIPR rental index from disk (saved by fetch_ons_rental_index)."""
     try:
-        candidates = sorted(DATA_RAW.glob("ons_rental_index_*.csv"), reverse=True)
+        candidates = sorted(DATA_RAW.glob(
+            "ons_rental_index_*.csv"), reverse=True)
         if candidates:
             df = pd.read_csv(candidates[0], parse_dates=["date"])
             return df
@@ -417,15 +428,17 @@ def _fetch_prms_anchor_rents() -> dict:
         )
         if period_match:
             end_month_str = period_match.group(3)[:3].capitalize()
-            end_year      = int(period_match.group(4))
-            anchor_date   = pd.to_datetime(f"{end_month_str} {end_year}", format="%b %Y")
+            end_year = int(period_match.group(4))
+            anchor_date = pd.to_datetime(
+                f"{end_month_str} {end_year}", format="%b %Y")
         else:
             anchor_date = pd.Timestamp("2023-03-01")   # safe fallback
 
         r2 = requests.get(prms_url, headers=_HEADERS, timeout=60)
         r2.raise_for_status()
 
-        raw = pd.read_excel(io.BytesIO(r2.content), sheet_name="Table 1.7", header=None)
+        raw = pd.read_excel(io.BytesIO(r2.content),
+                            sheet_name="Table 1.7", header=None)
 
         # Find header row: contains "Median" or "Region"
         header_row = None
@@ -438,17 +451,21 @@ def _fetch_prms_anchor_rents() -> dict:
         if header_row is None:
             raise ValueError("Header row not found in PRMS Table 1.1")
 
-        headers  = [str(v).strip() if pd.notna(v) else "" for v in raw.iloc[header_row].tolist()]
+        headers = [str(v).strip() if pd.notna(
+            v) else "" for v in raw.iloc[header_row].tolist()]
         # Prefer exact "Region" column over "Area Code" columns
-        region_c = next((i for i, h in enumerate(headers) if h == "Region"), None)
+        region_c = next((i for i, h in enumerate(
+            headers) if h == "Region"), None)
         if region_c is None:
-            region_c = next(i for i, h in enumerate(headers) if "Region" in h or "Area" in h)
+            region_c = next(i for i, h in enumerate(headers)
+                            if "Region" in h or "Area" in h)
         median_c = next(i for i, h in enumerate(headers) if "Median" in h)
 
         anchors = {}
         for _, row in raw.iloc[header_row + 1:].iterrows():
             region_raw = str(row.iloc[region_c]).strip()
-            mapped     = _PIPR_REGION_MAP.get(region_raw) or _PIPR_REGION_MAP.get(region_raw.title())
+            mapped = _PIPR_REGION_MAP.get(
+                region_raw) or _PIPR_REGION_MAP.get(region_raw.title())
             if not mapped or mapped not in _REGIONS:
                 # Try upper-case lookup
                 mapped = _PIPR_REGION_MAP.get(region_raw.upper())
@@ -491,7 +508,8 @@ def _backcast_rent_levels(pipr: pd.DataFrame, anchor_rents: dict) -> pd.DataFram
 
     records = []
     for region in _REGIONS:
-        region_pipr = pipr[pipr["region"] == region].set_index("date")["rental_index"]
+        region_pipr = pipr[pipr["region"] == region].set_index("date")[
+                                                               "rental_index"]
         if region_pipr.empty:
             continue
 
@@ -553,10 +571,11 @@ def _rental_level_placeholder() -> pd.DataFrame:
         "Northern Ireland":          550,
     }
     dates = pd.date_range("2000-01-01", "2024-12-01", freq="MS")
-    rows  = []
+    rows = []
     for region, base_rent in _BASE_RENTS_2015.items():
         for d in dates:
             years_from_2015 = (d.year - 2015) + (d.month - 1) / 12
             rent = base_rent * (1.01 ** years_from_2015)
-            rows.append({"date": d, "region": region, "median_monthly_rent": round(rent, 0)})
+            rows.append({"date": d, "region": region,
+                        "median_monthly_rent": round(rent, 0)})
     return pd.DataFrame(rows)

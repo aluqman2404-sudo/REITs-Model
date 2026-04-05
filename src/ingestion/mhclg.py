@@ -28,7 +28,7 @@ _HEADERS = {
     )
 }
 
-_REGIONS    = PARAMS["project"]["regions"]
+_REGIONS = PARAMS["project"]["regions"]
 _START_YEAR = PARAMS["project"]["base_year"]
 
 # Direct URL for Table 118 (net additional dwellings by region)
@@ -47,7 +47,7 @@ _GOV_UK_NET_SUPPLY = (
 _REGION_MAP = {
     "North East":              "North East",
     "North West":              "North West",
-    "Yorkshire and The Humber":"Yorkshire and The Humber",
+    "Yorkshire and The Humber": "Yorkshire and The Humber",
     "East Midlands":           "East Midlands",
     "West Midlands":           "West Midlands",
     "East of England":         "East of England",
@@ -115,7 +115,8 @@ def _download_table118(url: str) -> pd.DataFrame:
     r = requests.get(url, headers=_HEADERS, timeout=90)
     r.raise_for_status()
 
-    sheets = pd.read_excel(io.BytesIO(r.content), engine="odf", sheet_name=None, header=None)
+    sheets = pd.read_excel(io.BytesIO(r.content),
+                           engine="odf", sheet_name=None, header=None)
 
     # Use the rounded sheet (cleaner for modelling)
     target_sheet = next(
@@ -139,14 +140,15 @@ def _download_table118(url: str) -> pd.DataFrame:
         raise ValueError("Could not find region header row in Table 118")
 
     raw.columns = raw.iloc[header_row].astype(str).str.strip()
-    raw         = raw.iloc[header_row + 1:].reset_index(drop=True)
+    raw = raw.iloc[header_row + 1:].reset_index(drop=True)
 
     # Keep only "Net additions" rows (first column value)
     component_col = raw.columns[0]
-    year_col      = raw.columns[1]
-    region_cols   = [c for c in raw.columns if c in _REGION_MAP]
+    year_col = raw.columns[1]
+    region_cols = [c for c in raw.columns if c in _REGION_MAP]
 
-    data = raw[raw[component_col].astype(str).str.strip() == "Net additions"].copy()
+    data = raw[raw[component_col].astype(
+        str).str.strip() == "Net additions"].copy()
     if data.empty:
         # Some files have the label in every row — just take all numeric rows
         data = raw.copy()
@@ -167,7 +169,8 @@ def _download_table118(url: str) -> pd.DataFrame:
             ons_region = _REGION_MAP[region_name]
             try:
                 val = float(str(row[region_name]).replace(",", "").strip())
-                rows.append({"date": date, "region": ons_region, "net_additions": val})
+                rows.append(
+                    {"date": date, "region": ons_region, "net_additions": val})
             except (ValueError, TypeError):
                 continue
 
@@ -181,7 +184,6 @@ def _download_table118(url: str) -> pd.DataFrame:
 def _find_latest_table118_url() -> str:
     """Scrape GOV.UK net supply page for the current Table 118 download URL."""
     from bs4 import BeautifulSoup
-    import re
 
     try:
         r = requests.get(_GOV_UK_NET_SUPPLY, headers=_HEADERS, timeout=15)

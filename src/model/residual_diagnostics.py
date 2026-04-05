@@ -24,7 +24,6 @@ import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 from scipy.stats import jarque_bera
@@ -47,9 +46,11 @@ def run_residual_diagnostics() -> dict:
 
     # Fit pooled OLS on anchor months (same spec as fit_structural_fair_value)
     sample = panel[panel["date"].dt.month.isin(ANCHOR_MONTHS)].copy()
-    sample = sample.dropna(subset=["log_real_price", *REGRESSORS]).reset_index(drop=True)
+    sample = sample.dropna(
+        subset=["log_real_price", *REGRESSORS]).reset_index(drop=True)
 
-    region_dummies = pd.get_dummies(sample["region"], prefix="region", drop_first=True, dtype=float)
+    region_dummies = pd.get_dummies(
+        sample["region"], prefix="region", drop_first=True, dtype=float)
     X = pd.concat([sample[REGRESSORS].astype(float), region_dummies], axis=1)
     X = sm.add_constant(X, has_constant="add")
     fit = sm.OLS(sample["log_real_price"], X).fit()
@@ -65,7 +66,8 @@ def run_residual_diagnostics() -> dict:
     jb_flag_count = 0
 
     for region in regions:
-        reg_resid = sample.loc[sample["region"] == region, "residual"].sort_values().values
+        reg_resid = sample.loc[sample["region"] ==
+                               region, "residual"].sort_values().values
         n_obs = len(reg_resid)
         flags: list[str] = []
 
@@ -82,19 +84,22 @@ def run_residual_diagnostics() -> dict:
                 lb = acorr_ljungbox(reg_resid, lags=[lag], return_df=True)
                 stat = float(lb["lb_stat"].iloc[0])
                 p = float(lb["lb_pvalue"].iloc[0])
-                lb_results[f"lag_{lag}"] = {"stat": round(stat, 4), "p": round(p, 4)}
+                lb_results[f"lag_{lag}"] = {
+                    "stat": round(stat, 4), "p": round(p, 4)}
                 if p < FLAG_P:
                     flags.append(f"autocorrelation_lag{lag}")
                     ac_flag_count += 1
             except Exception as e:
-                lb_results[f"lag_{lag}"] = {"stat": None, "p": None, "error": str(e)}
+                lb_results[f"lag_{lag}"] = {
+                    "stat": None, "p": None, "error": str(e)}
 
         # 2. ARCH test at lag 4
         arch_result: dict = {}
         try:
             if n_obs > 10:
                 lm_stat, lm_p, f_stat, f_p = het_arch(reg_resid, nlags=4)
-                arch_result["lag_4"] = {"stat": round(float(lm_stat), 4), "p": round(float(lm_p), 4)}
+                arch_result["lag_4"] = {"stat": round(
+                    float(lm_stat), 4), "p": round(float(lm_p), 4)}
                 if lm_p < FLAG_P:
                     flags.append("arch_heteroskedasticity")
                     arch_flag_count += 1
@@ -105,7 +110,8 @@ def run_residual_diagnostics() -> dict:
         jb_result: dict = {}
         try:
             jb_stat, jb_p = jarque_bera(reg_resid)
-            jb_result = {"stat": round(float(jb_stat), 4), "p": round(float(jb_p), 4)}
+            jb_result = {"stat": round(
+                float(jb_stat), 4), "p": round(float(jb_p), 4)}
             if jb_p < FLAG_P:
                 flags.append("non_normality")
                 jb_flag_count += 1
@@ -160,7 +166,8 @@ def run_residual_diagnostics() -> dict:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(json.dumps(output, indent=2), encoding="utf-8")
     print(f"\nSaved to {OUTPUT_PATH}")
-    print(f"Summary: AC={ac_flag_count}, ARCH={arch_flag_count}, JB={jb_flag_count} flags")
+    print(
+        f"Summary: AC={ac_flag_count}, ARCH={arch_flag_count}, JB={jb_flag_count} flags")
     return output
 
 

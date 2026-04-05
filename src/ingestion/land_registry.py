@@ -35,33 +35,38 @@ def _find_latest_url() -> tuple[str, str]:
     """
     from bs4 import BeautifulSoup
 
-    collection = requests.get(_GOV_UK_HPI_COLLECTION, headers=_HEADERS, timeout=15)
+    collection = requests.get(_GOV_UK_HPI_COLLECTION,
+                              headers=_HEADERS, timeout=15)
     collection.raise_for_status()
     collection_soup = BeautifulSoup(collection.text, "lxml")
 
     latest_page_url = None
-    latest_label = None
     for a in collection_soup.find_all("a", href=True):
         href = a["href"]
-        match = re.search(r"/government/statistical-data-sets/uk-house-price-index-data-downloads-([a-z]+-\d{4})", href)
+        match = re.search(
+            r"/government/statistical-data-sets/uk-house-price-index-data-downloads-([a-z]+-\d{4})", href)
         if match:
-            latest_page_url = href if href.startswith("http") else f"https://www.gov.uk{href}"
-            latest_label = match.group(1)
+            latest_page_url = href if href.startswith(
+                "http") else f"https://www.gov.uk{href}"
+            match.group(1)
             break
 
     if latest_page_url is None:
-        raise RuntimeError("Could not locate the latest UK HPI data-download page from the GOV.UK collection index.")
+        raise RuntimeError(
+            "Could not locate the latest UK HPI data-download page from the GOV.UK collection index.")
 
     page = requests.get(latest_page_url, headers=_HEADERS, timeout=15)
     page.raise_for_status()
     page_soup = BeautifulSoup(page.text, "lxml")
     for a in page_soup.find_all("a", href=True):
         href = a["href"]
-        match = re.search(r"Average-prices-(\d{4}-\d{2})\.csv", href, re.IGNORECASE)
+        match = re.search(
+            r"Average-prices-(\d{4}-\d{2})\.csv", href, re.IGNORECASE)
         if match:
             label = match.group(1)
             if not href.startswith("http"):
-                href = "https://publicdata.landregistry.gov.uk/" + href.lstrip("/")
+                href = "https://publicdata.landregistry.gov.uk/" + \
+                    href.lstrip("/")
             return href, label
 
     # Final fallback — the S3 path is deterministic; try the most likely recent months
@@ -114,7 +119,8 @@ def fetch_land_registry(url: str | None = None, save: bool = True) -> pd.DataFra
 
     # Find and standardise the region column
     region_col = next(
-        (c for c in df.columns if c in ("regionname", "region_name", "areaofresidence")),
+        (c for c in df.columns if c in (
+            "regionname", "region_name", "areaofresidence")),
         None
     )
     if region_col is None:
@@ -130,7 +136,8 @@ def fetch_land_registry(url: str | None = None, save: bool = True) -> pd.DataFra
     }
     df = df.rename(columns=rename)
 
-    keep = [c for c in ["date", "region", "average_price", "index", "sales_volume"] if c in df.columns]
+    keep = [c for c in ["date", "region", "average_price",
+                        "index", "sales_volume"] if c in df.columns]
     df = df[keep].sort_values(["region", "date"]).reset_index(drop=True)
 
     if save:
