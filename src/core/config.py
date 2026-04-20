@@ -7,12 +7,13 @@ from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 from src.core.paths import CONFIG_DIR
-
-
-load_dotenv()
 
 
 @dataclass(frozen=True)
