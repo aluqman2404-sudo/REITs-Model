@@ -66,6 +66,23 @@ blockquote {
     border: 1px solid var(--line);
 }
 
+/* Download buttons */
+[data-testid="stDownloadButton"] > button {
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    color: var(--accent);
+    font-weight: 500;
+    padding: 0.45rem 1rem;
+    box-shadow: 0 2px 8px rgba(18, 53, 91, 0.06);
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+[data-testid="stDownloadButton"] > button:hover {
+    background: rgba(18, 53, 91, 0.06);
+    box-shadow: 0 4px 12px rgba(18, 53, 91, 0.10);
+}
+
 @media (max-width: 640px) {
     [data-testid="column"] {
         min-width: 100% !important;

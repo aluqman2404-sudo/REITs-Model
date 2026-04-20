@@ -1,6 +1,14 @@
 """Stage 7 entrypoint for the multipage Streamlit dashboard."""
 
 from __future__ import annotations
+import os
+import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 import streamlit as st
 from src.ui.views import (
     render_comparison_view,
@@ -14,14 +22,6 @@ from src.ui.views import (
 from src.ui.pages.limitations import render_limitations
 from src.core.logging_utils import configure_monitoring, get_logger, log_model_event
 from src.core.config import load_config
-
-import os
-import sys
-from pathlib import Path
-
-ROOT_DIR = Path(__file__).resolve().parents[2]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
 
 
 # Configure monitoring before any Streamlit calls so the startup event is captured.

@@ -1,22 +1,12 @@
-"""Matplotlib charts for the Stage 7 research dashboard."""
+"""Interactive Plotly charts for the Stage 7 research dashboard."""
 
 from __future__ import annotations
 from src.ui.formatters import band_colour
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib
-
-import os
-import tempfile
-
-_CACHE_ROOT = os.path.join(tempfile.gettempdir(), "uk_housing_stage7")
-os.makedirs(_CACHE_ROOT, exist_ok=True)
-os.environ.setdefault("MPLCONFIGDIR", _CACHE_ROOT)
-
-
-matplotlib.use("Agg")
-
+import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
 
 INK = "#12355b"
 TEAL = "#0f766e"
@@ -25,177 +15,405 @@ SLATE = "#4f5b66"
 GRID = "#d9e2ec"
 
 
-def _style_axes(ax) -> None:
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_color(GRID)
-    ax.spines["bottom"].set_color(GRID)
-    ax.tick_params(colors=SLATE)
-    ax.xaxis.label.set_color(SLATE)
-    ax.yaxis.label.set_color(SLATE)
-    ax.grid(axis="y", color=GRID, linewidth=0.6, alpha=0.6)
+def _hex_to_rgba(hex_colour: str, alpha: float) -> str:
+    """Convert a #rrggbb hex string to an rgba(...) CSS string."""
+    h = hex_colour.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+BG = "rgba(255,255,255,0)"
+
+_LAYOUT = dict(
+    paper_bgcolor=BG,
+    plot_bgcolor=BG,
+    font=dict(family="IBM Plex Sans, sans-serif", color=SLATE, size=13),
+    margin=dict(l=60, r=30, t=50, b=110),
+    hoverlabel=dict(
+        bgcolor="white",
+        bordercolor=GRID,
+        font_size=13,
+        font_family="IBM Plex Sans, sans-serif",
+    ),
+    height=420,
+)
+
+_AXIS = dict(
+    showgrid=True,
+    gridcolor=GRID,
+    gridwidth=0.6,
+    zeroline=False,
+    linecolor=GRID,
+    tickfont=dict(color=SLATE),
+    title_font=dict(color=SLATE),
+)
 
 
-def fan_chart(history: pd.DataFrame, forecast: pd.DataFrame, region: str, scenario_name: str):
-    future_months = pd.date_range(
-        history["date"].max(), periods=len(forecast), freq="MS")
-    fig, ax = plt.subplots(figsize=(10, 5.2))
-    ax.plot(history["date"], history["nominal_house_price"],
-            color=INK, lw=2, label="Historical price")
-    ax.fill_between(
-        future_months, forecast["p10"], forecast["p90"], color=SKY, alpha=0.25, label="10-90 range")
-    ax.fill_between(future_months, forecast["p25"], forecast["p75"],
-                    color="#3182ce", alpha=0.25, label="25-75 range")
-    ax.plot(future_months, forecast["p50"],
-            color=TEAL, lw=2.5, label="Median path")
-    ax.set_title(f"{region}: historical and simulated price path",
-                 fontsize=12, loc="left")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Nominal average price (GBP)")
-    ax.legend(frameon=False, ncol=3)
-    _style_axes(ax)
-    ax.text(
-        0,
-        -0.18,
-        f"Scenario lab path under {scenario_name}. Fan widths show simulated uncertainty, not forecast certainty.",
-        transform=ax.transAxes,
-        fontsize=10,
-        color=SLATE,
-    )
-    fig.tight_layout()
+def _apply_layout(fig: go.Figure, **extra) -> go.Figure:
+    fig.update_layout(**{**_LAYOUT, **extra})
+    fig.update_xaxes(**_AXIS)
+    fig.update_yaxes(**_AXIS)
     return fig
 
 
-def score_breakdown_chart(component_scores: dict[str, float], title: str):
+# ---------------------------------------------------------------------------
+# Fan chart
+# ---------------------------------------------------------------------------
+
+def fan_chart(
+    history: pd.DataFrame,
+    forecast: pd.DataFrame,
+    region: str,
+    scenario_name: str,
+    subtitle: str | None = None,
+) -> go.Figure:
+    future_months = pd.date_range(
+        history["date"].max(), periods=len(forecast), freq="MS"
+    )
+
+    fig = go.Figure()
+
+    # Historical line
+    fig.add_trace(go.Scatter(
+        x=history["date"],
+        y=history["nominal_house_price"],
+        name="Historical price",
+        line=dict(color=INK, width=2),
+        hovertemplate="<b>Historical</b><br>%{x|%b %Y}: £%{y:,.0f}<extra></extra>",
+    ))
+
+    # P10–P90 band
+    fig.add_trace(go.Scatter(
+        x=pd.concat([pd.Series(future_months), pd.Series(future_months[::-1])]),
+        y=pd.concat([forecast["p90"], forecast["p10"].iloc[::-1]]),
+        fill="toself",
+        fillcolor="rgba(144,205,244,0.20)",
+        line=dict(width=0),
+        name="10–90 range",
+        hoverinfo="skip",
+    ))
+
+    # P25–P75 band
+    fig.add_trace(go.Scatter(
+        x=pd.concat([pd.Series(future_months), pd.Series(future_months[::-1])]),
+        y=pd.concat([forecast["p75"], forecast["p25"].iloc[::-1]]),
+        fill="toself",
+        fillcolor="rgba(49,130,206,0.18)",
+        line=dict(width=0),
+        name="25–75 range",
+        hoverinfo="skip",
+    ))
+
+    # Median path
+    fig.add_trace(go.Scatter(
+        x=future_months,
+        y=forecast["p50"],
+        name="Median path",
+        line=dict(color=TEAL, width=2.5),
+        hovertemplate="<b>Median</b><br>%{x|%b %Y}: £%{y:,.0f}<extra></extra>",
+    ))
+
+    # P10 / P90 boundary lines for hover
+    fig.add_trace(go.Scatter(
+        x=future_months, y=forecast["p10"],
+        name="P10", line=dict(color=SKY, width=1, dash="dot"),
+        hovertemplate="<b>P10</b><br>%{x|%b %Y}: £%{y:,.0f}<extra></extra>",
+    ))
+    fig.add_trace(go.Scatter(
+        x=future_months, y=forecast["p90"],
+        name="P90", line=dict(color=SKY, width=1, dash="dot"),
+        hovertemplate="<b>P90</b><br>%{x|%b %Y}: £%{y:,.0f}<extra></extra>",
+    ))
+
+    _subtitle = subtitle if subtitle is not None else (
+        f"Scenario lab path under {scenario_name}. Fan widths show simulated uncertainty, not forecast certainty."
+    )
+    _apply_layout(
+        fig,
+        title=dict(text=f"{region}: historical and simulated price path", font=dict(size=13, color=INK), x=0),
+        xaxis_title="Date",
+        yaxis_title="Nominal average price (GBP)",
+        legend=dict(orientation="h", y=-0.22, x=0),
+        annotations=[dict(
+            text=_subtitle,
+            xref="paper", yref="paper",
+            x=0, y=-0.36,
+            showarrow=False,
+            font=dict(size=11, color=SLATE),
+            align="left",
+        )],
+        hovermode="x unified",
+        height=480,
+        margin=dict(l=60, r=30, t=50, b=140),
+    )
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Score breakdown (horizontal bar)
+# ---------------------------------------------------------------------------
+
+def score_breakdown_chart(component_scores: dict[str, float], title: str) -> go.Figure:
     labels = [name.replace("_", " ").title() for name in component_scores]
     values = list(component_scores.values())
-    colours = ["#1f7a45" if v >= 67 else "#b26a00" if v >=
-               40 else "#a63f3f" for v in values]
-    fig, ax = plt.subplots(figsize=(7, 3.2))
-    ax.barh(labels, values, color=colours)
-    for idx, value in enumerate(values):
-        ax.text(value + 1.5, idx, f"{value:.0f}", va="center", fontsize=10)
-    ax.set_xlim(0, 105)
-    ax.set_xlabel("Score (0-100)")
-    ax.set_title(title, fontsize=12, loc="left")
-    _style_axes(ax)
-    ax.grid(axis="x", color=GRID, linewidth=0.6, alpha=0.6)
-    fig.tight_layout()
-    return fig
+    colours = ["#1f7a45" if v >= 67 else "#b26a00" if v >= 40 else "#a63f3f" for v in values]
 
-
-def affordability_gauge(score: float, title: str):
-    fig, ax = plt.subplots(figsize=(6.5, 1.8))
-    ax.barh([0], [100], color="#e5e7eb", height=0.45)
-    colour = "#1f7a45" if score >= 67 else "#b26a00" if score >= 40 else "#a63f3f"
-    ax.barh([0], [score], color=colour, height=0.45)
-    ax.text(score + 1.5, 0, f"{score:.0f}/100",
-            va="center", fontsize=11, fontweight="bold")
-    ax.set_xlim(0, 110)
-    ax.set_yticks([])
-    ax.set_xlabel("Affordability")
-    ax.set_title(title, fontsize=12, loc="left")
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-    ax.tick_params(colors=SLATE)
-    fig.tight_layout()
-    return fig
-
-
-def scenario_comparison_chart(sim_region: pd.DataFrame):
-    table = sim_region.sort_values("median_5yr_growth").copy()
-    fig, ax = plt.subplots(figsize=(7.5, 4.2))
-    y = np.arange(len(table))
-    err_low = table["median_5yr_growth"] - table["p10_5yr_growth"]
-    err_high = table["p90_5yr_growth"] - table["median_5yr_growth"]
-    colours = plt.cm.RdYlGn_r(table["prob_terminal_loss_10pct"].to_numpy())
-    ax.barh(y, table["median_5yr_growth"], color=colours)
-    ax.errorbar(
-        table["median_5yr_growth"],
-        y,
-        xerr=[err_low, err_high],
-        fmt="none",
-        ecolor=INK,
-        capsize=3,
+    fig = go.Figure(go.Bar(
+        x=values,
+        y=labels,
+        orientation="h",
+        marker_color=colours,
+        text=[f"{v:.0f}" for v in values],
+        textposition="outside",
+        hovertemplate="<b>%{y}</b><br>Score: %{x:.0f}/100<extra></extra>",
+    ))
+    _apply_layout(
+        fig,
+        title=dict(text=title, font=dict(size=13, color=INK), x=0),
+        xaxis=dict(range=[0, 115], title="Score (0–100)", **_AXIS),
+        bargap=0.35,
     )
-    ax.set_yticks(y)
-    ax.set_yticklabels(table["scenario"])
-    ax.set_xlabel("Median 5-year price change (%)")
-    ax.set_title("Scenario comparison", fontsize=12, loc="left")
-    _style_axes(ax)
-    ax.grid(axis="x", color=GRID, linewidth=0.6, alpha=0.6)
-    fig.tight_layout()
     return fig
 
 
-def regional_rank_chart(region_table: pd.DataFrame, score_col: str, selected_region: str, title: str):
+# ---------------------------------------------------------------------------
+# Affordability gauge (single horizontal bar)
+# ---------------------------------------------------------------------------
+
+def affordability_gauge(score: float, title: str) -> go.Figure:
+    colour = "#1f7a45" if score >= 67 else "#b26a00" if score >= 40 else "#a63f3f"
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=[100], y=[""], orientation="h",
+        marker_color="#e5e7eb", showlegend=False,
+        hoverinfo="skip",
+    ))
+    fig.add_trace(go.Bar(
+        x=[score], y=[""], orientation="h",
+        marker_color=colour, showlegend=False,
+        text=[f"{score:.0f}/100"], textposition="outside",
+        hovertemplate=f"Affordability score: {score:.0f}/100<extra></extra>",
+    ))
+    _apply_layout(
+        fig,
+        title=dict(text=title, font=dict(size=13, color=INK), x=0),
+        xaxis=dict(range=[0, 120], title="Affordability", **_AXIS),
+        yaxis=dict(visible=False),
+        barmode="overlay",
+        height=180,
+        margin=dict(l=60, r=30, t=50, b=60),
+    )
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Scenario comparison (horizontal bars + error bars + colour = downside risk)
+# ---------------------------------------------------------------------------
+
+def scenario_comparison_chart(sim_region: pd.DataFrame) -> go.Figure:
+    table = sim_region.sort_values("median_5yr_growth").copy()
+    loss_vals = table["prob_terminal_loss_10pct"].to_numpy()
+    err_low = (table["median_5yr_growth"] - table["p10_5yr_growth"]).to_numpy()
+    err_high = (table["p90_5yr_growth"] - table["median_5yr_growth"]).to_numpy()
+
+    # Map loss probability to RdYlGn_r colour scale
+    norm = (loss_vals - loss_vals.min()) / max(loss_vals.max() - loss_vals.min(), 1e-9)
+    cmap = px.colors.diverging.RdYlGn
+    n = len(cmap)
+    colours = [cmap[min(int(v * (n - 1)), n - 1)] for v in norm]
+
+    fig = go.Figure()
+    for i, (scenario, med, elo, ehi, colour, loss) in enumerate(zip(
+        table["scenario"], table["median_5yr_growth"],
+        err_low, err_high, colours, loss_vals
+    )):
+        fig.add_trace(go.Bar(
+            x=[med], y=[scenario],
+            orientation="h",
+            marker_color=colour,
+            error_x=dict(type="data", symmetric=False, array=[ehi], arrayminus=[elo], color=INK, thickness=1.5, width=4),
+            name=scenario,
+            showlegend=False,
+            hovertemplate=(
+                f"<b>{scenario}</b><br>"
+                f"Median 5y return: {med:+.1f}%<br>"
+                f"P10–P90: {med - elo:+.1f}% to {med + ehi:+.1f}%<br>"
+                f"P(loss >10%): {loss:.0%}<extra></extra>"
+            ),
+        ))
+
+    # Invisible colourscale trace for the colorbar
+    fig.add_trace(go.Scatter(
+        x=[None], y=[None],
+        mode="markers",
+        marker=dict(
+            colorscale="RdYlGn",
+            reversescale=True,
+            cmin=float(loss_vals.min()),
+            cmax=float(loss_vals.max()),
+            colorbar=dict(
+                title=dict(text="P(loss >10%)", side="right"),
+                tickformat=".0%",
+                thickness=12,
+                len=0.8,
+            ),
+            showscale=True,
+            color=[],
+        ),
+        showlegend=False,
+        hoverinfo="skip",
+    ))
+
+    _apply_layout(
+        fig,
+        title=dict(text="Scenario comparison — bar colour = downside risk (red = higher)", font=dict(size=12, color=INK), x=0),
+        xaxis_title="Median 5-year price change (%)",
+        bargap=0.3,
+    )
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Regional rank chart (horizontal bar)
+# ---------------------------------------------------------------------------
+
+def regional_rank_chart(
+    region_table: pd.DataFrame,
+    score_col: str,
+    selected_region: str,
+    title: str,
+) -> go.Figure:
     table = region_table.sort_values(score_col).copy()
     band_col = f"{score_col.split('_')[0]}_band"
     colours = [
-        "#12355b" if region == selected_region else band_colour(label)
+        INK if region == selected_region else band_colour(label)
         for region, label in zip(table["region"], table[band_col])
     ]
-    fig, ax = plt.subplots(figsize=(8.5, 5.4))
-    ax.barh(table["region"], table[score_col], color=colours)
-    ax.set_xlim(0, 100)
-    ax.set_xlabel("Score")
-    ax.set_title(title, fontsize=12, loc="left")
-    _style_axes(ax)
-    ax.grid(axis="x", color=GRID, linewidth=0.6, alpha=0.6)
-    fig.tight_layout()
+    scores = table[score_col].tolist()
+
+    fig = go.Figure(go.Bar(
+        x=scores,
+        y=table["region"].tolist(),
+        orientation="h",
+        marker_color=colours,
+        hovertemplate="<b>%{y}</b><br>Score: %{x:.0f}/100<extra></extra>",
+    ))
+    _apply_layout(
+        fig,
+        title=dict(text=title, font=dict(size=13, color=INK), x=0),
+        xaxis=dict(range=[0, 100], title="Score", **_AXIS),
+        bargap=0.3,
+        height=500,
+    )
     return fig
 
 
-def yield_risk_chart(region_table: pd.DataFrame, selected_region: str):
-    fig, ax = plt.subplots(figsize=(7.5, 4.6))
+# ---------------------------------------------------------------------------
+# Yield vs risk scatter
+# ---------------------------------------------------------------------------
+
+def yield_risk_chart(region_table: pd.DataFrame, selected_region: str) -> go.Figure:
     colours = [band_colour(label) for label in region_table["reit_band"]]
-    sizes = [180 if region ==
-             selected_region else 80 for region in region_table["region"]]
-    scatter = ax.scatter(region_table["gross_yield_pct"],
-                         region_table["p_terminal_loss_10_avg"], c=colours, s=sizes, alpha=0.8, edgecolors=INK)
-    del scatter
-    for _, row in region_table.iterrows():
-        if row["region"] == selected_region:
-            ax.annotate(row["region"], (row["gross_yield_pct"], row["p_terminal_loss_10_avg"]), xytext=(
-                6, 6), textcoords="offset points", fontsize=9)
-    ax.set_xlabel("Current gross yield (%)")
-    ax.set_ylabel("P(terminal loss >10%)")
-    ax.set_title("Yield versus downside risk", fontsize=12, loc="left")
-    _style_axes(ax)
-    ax.grid(color=GRID, linewidth=0.6, alpha=0.6)
-    fig.tight_layout()
+    sizes = [18 if region == selected_region else 10 for region in region_table["region"]]
+
+    fig = go.Figure()
+    for i, row in region_table.iterrows():
+        is_selected = row["region"] == selected_region
+        fig.add_trace(go.Scatter(
+            x=[row["gross_yield_pct"]],
+            y=[row["p_terminal_loss_10_avg"]],
+            mode="markers+text" if is_selected else "markers",
+            marker=dict(
+                color=band_colour(row["reit_band"]),
+                size=sizes[list(region_table.index).index(i)],
+                line=dict(color=INK, width=1),
+            ),
+            text=[row["region"]] if is_selected else [],
+            textposition="top right",
+            name=row["region"],
+            hovertemplate=(
+                f"<b>{row['region']}</b><br>"
+                f"Gross yield: {row['gross_yield_pct']:.1f}%<br>"
+                f"P(loss >10%): {row['p_terminal_loss_10_avg']:.1%}<extra></extra>"
+            ),
+            showlegend=False,
+        ))
+
+    _apply_layout(
+        fig,
+        title=dict(text="Yield versus downside risk", font=dict(size=13, color=INK), x=0),
+        xaxis_title="Current gross yield (%)",
+        yaxis_title="P(terminal loss >10%)",
+        hovermode="closest",
+    )
     return fig
 
 
-def terminal_distribution_chart(paths: pd.DataFrame, start_price: float, title: str):
+# ---------------------------------------------------------------------------
+# Terminal return distribution (histogram)
+# ---------------------------------------------------------------------------
+
+def terminal_distribution_chart(paths: pd.DataFrame, start_price: float, title: str) -> go.Figure:
     terminal_returns = (paths.iloc[-1] / start_price - 1.0) * 100.0
-    fig, ax = plt.subplots(figsize=(7.5, 4.2))
-    ax.hist(terminal_returns, bins=35, color=SKY, edgecolor="white")
-    ax.axvline(np.median(terminal_returns), color=INK, linestyle="--", lw=2)
-    ax.set_xlabel("5-year total return (%)")
-    ax.set_ylabel("Count")
-    ax.set_title(title, fontsize=12, loc="left")
-    _style_axes(ax)
-    fig.tight_layout()
+    median_val = float(np.median(terminal_returns))
+
+    fig = go.Figure()
+    fig.add_trace(go.Histogram(
+        x=terminal_returns,
+        nbinsx=35,
+        marker_color=SKY,
+        marker_line_color="white",
+        marker_line_width=1,
+        name="Simulated returns",
+        hovertemplate="Return: %{x:.1f}%<br>Count: %{y}<extra></extra>",
+    ))
+    fig.add_vline(
+        x=median_val,
+        line=dict(color=INK, width=2, dash="dash"),
+        annotation_text=f"Median: {median_val:.1f}%",
+        annotation_position="top right",
+        annotation_font=dict(color=INK, size=11),
+    )
+    _apply_layout(
+        fig,
+        title=dict(text=title, font=dict(size=13, color=INK), x=0),
+        xaxis_title="5-year total return (%)",
+        yaxis_title="Count",
+    )
     return fig
 
 
-def tail_risk_heatmap(simulation: pd.DataFrame):
+# ---------------------------------------------------------------------------
+# Tail risk heatmap
+# ---------------------------------------------------------------------------
+
+def tail_risk_heatmap(simulation: pd.DataFrame) -> go.Figure:
     pivot = simulation.pivot(
-        index="region", columns="scenario", values="prob_terminal_loss_10pct")
-    fig, ax = plt.subplots(figsize=(8.5, 5.2))
-    im = ax.imshow(pivot.values, cmap="RdYlGn_r",
-                   aspect="auto", vmin=0, vmax=1)
-    ax.set_xticks(range(len(pivot.columns)))
-    ax.set_xticklabels(pivot.columns, rotation=25, ha="right")
-    ax.set_yticks(range(len(pivot.index)))
-    ax.set_yticklabels(pivot.index)
-    ax.set_title("Regional downside heatmap", fontsize=12, loc="left")
-    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label("P(loss >10%)")
-    fig.tight_layout()
+        index="region", columns="scenario", values="prob_terminal_loss_10pct"
+    )
+
+    fig = go.Figure(go.Heatmap(
+        z=pivot.values,
+        x=pivot.columns.tolist(),
+        y=pivot.index.tolist(),
+        colorscale="RdYlGn",
+        reversescale=True,
+        zmin=0,
+        zmax=1,
+        colorbar=dict(title="P(loss >10%)", tickformat=".0%"),
+        hovertemplate="<b>%{y}</b><br>Scenario: %{x}<br>P(loss >10%): %{z:.1%}<extra></extra>",
+    ))
+    _apply_layout(
+        fig,
+        title=dict(text="Regional downside heatmap", font=dict(size=13, color=INK), x=0),
+        xaxis=dict(**_AXIS, tickangle=-25),
+        height=500,
+    )
     return fig
 
+
+# ---------------------------------------------------------------------------
+# Region comparison line chart
+# ---------------------------------------------------------------------------
 
 _COMPARISON_COLOURS = ["#12355b", "#0f766e", "#b45309", "#6d28d9"]
 
@@ -203,7 +421,7 @@ _METRIC_COLUMN: dict[str, str | None] = {
     "Nominal House Price Index (2005=100)": "nominal_house_price",
     "Real House Price Index (2005=100)": "real_house_price",
     "Fair Value Gap (%)": "fair_value_gap_log",
-    "Downside Probability (%)": None,
+    "Downside Probability (%) — simulation only, no historical series": None,
     "Rental Yield (%)": "gross_yield_pct",
 }
 
@@ -219,50 +437,42 @@ def plot_region_comparison(
     metric: str,
     period: str,
     panel_df: pd.DataFrame,
-):
-    """Plot selected regions on a single figure for the chosen metric and period.
-
-    Returns a Matplotlib figure.
-    """
+) -> go.Figure:
     col = _METRIC_COLUMN.get(metric)
-    fig, ax = plt.subplots(figsize=(10, 5.2))
+    fig = go.Figure()
 
     if col is None:
-        ax.text(
-            0.5,
-            0.5,
-            f'"{metric}" is not available as a historical time series.\n'
-            "Use the Scenario Lab for simulation-based downside estimates.",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-            fontsize=11,
-            color=SLATE,
+        fig.add_annotation(
+            text=(
+                f'"{metric}" is not available as a historical time series.<br>'
+                "Use the Scenario Lab for simulation-based downside estimates."
+            ),
+            xref="paper", yref="paper",
+            x=0.5, y=0.5,
+            showarrow=False,
+            font=dict(size=12, color=SLATE),
+            align="center",
         )
-        ax.set_title(metric, fontsize=12, loc="left")
-        _style_axes(ax)
-        fig.tight_layout()
+        _apply_layout(fig, title=dict(text=metric, font=dict(size=13, color=INK), x=0))
         return fig
 
     if col not in panel_df.columns:
-        ax.text(
-            0.5,
-            0.5,
-            f'Column "{col}" not found in panel data.',
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-            fontsize=11,
-            color=SLATE,
+        fig.add_annotation(
+            text=f'Column "{col}" not found in panel data.',
+            xref="paper", yref="paper",
+            x=0.5, y=0.5,
+            showarrow=False,
+            font=dict(size=12, color=SLATE),
         )
-        ax.set_title(metric, fontsize=12, loc="left")
-        _style_axes(ax)
-        fig.tight_layout()
+        _apply_layout(fig, title=dict(text=metric, font=dict(size=13, color=INK), x=0))
         return fig
 
     start_date = pd.Timestamp(_PERIOD_START.get(period, "2005-01-01"))
     is_index_metric = col in ("nominal_house_price", "real_house_price")
     is_log_gap = col == "fair_value_gap_log"
+
+    # Default y_label in case all subsets are empty
+    y_label = "Index (100 = start of period)" if is_index_metric else "Fair value gap (approx. %)" if is_log_gap else metric
 
     _ci_lower_col = "fair_value_gap_lower_90"
     _ci_upper_col = "fair_value_gap_upper_90"
@@ -271,8 +481,7 @@ def plot_region_comparison(
     for i, region in enumerate(regions[:4]):
         colour = _COMPARISON_COLOURS[i % len(_COMPARISON_COLOURS)]
         subset = (
-            panel_df[(panel_df["region"] == region) &
-                     (panel_df["date"] >= start_date)]
+            panel_df[(panel_df["region"] == region) & (panel_df["date"] >= start_date)]
             .sort_values("date")
             .dropna(subset=[col])
         )
@@ -287,60 +496,86 @@ def plot_region_comparison(
         elif is_log_gap:
             values = values * 100.0
 
-        ax.plot(subset["date"], values, color=colour, lw=2, label=region)
+        hover_fmt = "%{y:.1f}" + ("%" if (is_log_gap or "%" in metric) else "")
 
-        # Optional 90% CI shaded band — only rendered for fair value gap when CI
-        # columns exist in the data.  Alpha=0.15 keeps the band unobtrusive.
+        fig.add_trace(go.Scatter(
+            x=subset["date"],
+            y=values,
+            name=region,
+            line=dict(color=colour, width=2),
+            hovertemplate=f"<b>{region}</b><br>%{{x|%b %Y}}: {hover_fmt}<extra></extra>",
+        ))
+
         if _has_ci_band:
             _ci_subset = subset.dropna(subset=[_ci_lower_col, _ci_upper_col])
             if not _ci_subset.empty:
-                ax.fill_between(
-                    _ci_subset["date"],
-                    _ci_subset[_ci_lower_col] * 100.0,
-                    _ci_subset[_ci_upper_col] * 100.0,
-                    color=colour,
-                    alpha=0.15,
-                    linewidth=0,
-                )
+                fig.add_trace(go.Scatter(
+                    x=pd.concat([_ci_subset["date"], _ci_subset["date"].iloc[::-1]]),
+                    y=pd.concat([_ci_subset[_ci_upper_col] * 100.0, _ci_subset[_ci_lower_col].iloc[::-1] * 100.0]),
+                    fill="toself",
+                    fillcolor=_hex_to_rgba(colour, 0.12),
+                    line=dict(width=0),
+                    showlegend=False,
+                    hoverinfo="skip",
+                    name=f"{region} 90% CI",
+                ))
 
     if is_index_metric:
-        ax.axhline(100, color=GRID, lw=1, linestyle="--")
-        ax.set_ylabel("Index (100 = start of period)")
+        fig.add_hline(y=100, line=dict(color=GRID, width=1, dash="dash"))
     elif is_log_gap:
-        ax.axhline(0, color=GRID, lw=1, linestyle="--")
-        ax.set_ylabel("Fair value gap (approx. %)")
-    else:
-        ax.set_ylabel(metric)
+        fig.add_hline(y=0, line=dict(color=GRID, width=1, dash="dash"))
 
-    ax.set_xlabel("Date")
-    ax.set_title(f"{metric} \u2014 regional comparison",
-                 fontsize=12, loc="left")
-    ax.legend(frameon=False, ncol=min(len(regions), 4))
-    _style_axes(ax)
-    ax.grid(color=GRID, linewidth=0.6, alpha=0.3)
-    fig.tight_layout()
+    _period_short = period.split("(")[0].strip()
+    _apply_layout(
+        fig,
+        title=dict(text=f"{metric} — {_period_short} — regional comparison", font=dict(size=13, color=INK), x=0),
+        xaxis_title="Date",
+        yaxis_title=y_label,
+        hovermode="x unified",
+        legend=dict(orientation="h", y=-0.22, x=0),
+        height=460,
+    )
     return fig
 
 
-def historical_vs_simulated_distribution_chart(distribution: pd.DataFrame, region: str):
+# ---------------------------------------------------------------------------
+# Historical vs simulated distribution
+# ---------------------------------------------------------------------------
+
+def historical_vs_simulated_distribution_chart(distribution: pd.DataFrame, region: str) -> go.Figure:
     subset = distribution[distribution["region"] == region].copy()
     ordered = ["p10", "p25", "p50", "p75", "p90"]
-    subset["percentile"] = pd.Categorical(
-        subset["percentile"], categories=ordered, ordered=True)
+    subset["percentile"] = pd.Categorical(subset["percentile"], categories=ordered, ordered=True)
     subset = subset.sort_values("percentile")
 
-    fig, ax = plt.subplots(figsize=(7.8, 4.2))
-    ax.plot(subset["percentile"].astype(str), subset["historical_return_pct"],
-            marker="o", lw=2, color=INK, label="Historical realised 5y")
-    ax.plot(subset["percentile"].astype(str), subset["simulated_return_pct"],
-            marker="o", lw=2, color=TEAL, label="Simulated baseline 5y")
-    ax.axhline(0.0, color="#94a3b8", lw=1, linestyle="--")
-    ax.set_xlabel("Percentile")
-    ax.set_ylabel("5-year return (%)")
-    ax.set_title(
-        f"{region}: historical vs simulated 5-year distribution", fontsize=12, loc="left")
-    ax.legend(frameon=False)
-    _style_axes(ax)
-    ax.grid(axis="y", color=GRID, linewidth=0.6, alpha=0.6)
-    fig.tight_layout()
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=subset["percentile"].astype(str),
+        y=subset["historical_return_pct"],
+        name="Historical realised 5y",
+        line=dict(color=INK, width=2),
+        mode="lines+markers",
+        marker=dict(size=7),
+        hovertemplate="<b>Historical</b><br>%{x}: %{y:.1f}%<extra></extra>",
+    ))
+    fig.add_trace(go.Scatter(
+        x=subset["percentile"].astype(str),
+        y=subset["simulated_return_pct"],
+        name="Simulated baseline 5y",
+        line=dict(color=TEAL, width=2),
+        mode="lines+markers",
+        marker=dict(size=7),
+        hovertemplate="<b>Simulated</b><br>%{x}: %{y:.1f}%<extra></extra>",
+    ))
+    fig.add_hline(y=0, line=dict(color="#94a3b8", width=1, dash="dash"))
+
+    _apply_layout(
+        fig,
+        title=dict(text=f"{region}: historical vs simulated 5-year distribution", font=dict(size=13, color=INK), x=0),
+        xaxis_title="Percentile",
+        yaxis_title="5-year return (%)",
+        legend=dict(orientation="h", y=-0.22, x=0),
+        hovermode="x unified",
+        height=400,
+    )
     return fig

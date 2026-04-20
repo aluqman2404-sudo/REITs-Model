@@ -40,25 +40,28 @@ def scenario_sensitivity_text(spread: float) -> str:
 def consumer_commentary(region_row: dict, signal_dashboard: dict, scenario_name: str) -> str:
     positives, negatives = top_signal_contributors(signal_dashboard["signals"])
     secondary = signal_dashboard["secondary_composite"]
+    sensitivity = scenario_sensitivity_text(float(region_row.get("scenario_spread", 0.0)))
     return (
-        f"{region_row['region']} looks mixed under the {scenario_name} scenario. "
-        f"Best areas: {', '.join(positives)}. "
-        f"Main weak spots: {', '.join(negatives)}. "
-        f"Secondary synthesis only: {secondary['score']:.0f}/100 ({secondary['bucket']}). "
-        f"{scenario_sensitivity_text(float(region_row.get('scenario_spread', 0.0)))}"
+        f"**{region_row['region']} — {scenario_name} scenario**\n\n"
+        f"- **Strengths:** {', '.join(positives)}\n"
+        f"- **Pressures:** {', '.join(negatives)}\n"
+        f"- **Secondary composite:** {secondary['score']:.0f}/100 ({secondary['bucket']})\n"
+        f"- **Scenario sensitivity:** {sensitivity}"
     )
 
 
 def reit_commentary(region_row: dict, signal_dashboard: dict, scenario_name: str) -> str:
     positives, negatives = top_signal_contributors(signal_dashboard["signals"])
     secondary = signal_dashboard["secondary_composite"]
+    sensitivity = scenario_sensitivity_text(float(region_row.get("scenario_spread", 0.0)))
+    loss_prob = float(region_row.get("p_terminal_loss_10_avg", 0.0))
     return (
-        f"{region_row['region']} looks mixed under the {scenario_name} institutional view. "
-        f"Best areas: {', '.join(positives)}. "
-        f"Main weak spots: {', '.join(negatives)}. "
-        f"Secondary synthesis only: {secondary['score']:.0f}/100 ({secondary['bucket']}). "
-        f"Average probability of a terminal loss greater than 10% is "
-        f"{float(region_row.get('p_terminal_loss_10_avg', 0.0)):.0%}."
+        f"**{region_row['region']} — {scenario_name} institutional view**\n\n"
+        f"- **Strengths:** {', '.join(positives)}\n"
+        f"- **Pressures:** {', '.join(negatives)}\n"
+        f"- **Secondary composite:** {secondary['score']:.0f}/100 ({secondary['bucket']})\n"
+        f"- **Scenario sensitivity:** {sensitivity}\n"
+        f"- **Tail risk:** {loss_prob:.0%} avg probability of a 10%+ terminal loss across scenarios"
     )
 
 

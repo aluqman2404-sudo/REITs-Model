@@ -11,6 +11,7 @@ linearmodels>=5.4,<7
 # Visualisation and UI
 matplotlib>=3.8,<3.11
 seaborn>=0.13,<0.14
+plotly>=5.18,<7
 streamlit>=1.50,<1.60
 
 # Data acquisition and parsing

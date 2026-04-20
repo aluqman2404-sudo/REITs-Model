@@ -64,6 +64,40 @@ def render_limitations() -> None:
         unsafe_allow_html=True,
     )
 
+    import pandas as _pd_lim
+    _LREF = [
+        ("L1",  "Material", "Data currency / publication-lag risk"),
+        ("L2",  "Significant", "Source series have unequal coverage endpoints"),
+        ("L3",  "Significant", "Publication lags in earnings and population data"),
+        ("L4",  "Significant", "Model does not beat zero-growth RMSE in 2022–2025 holdout"),
+        ("L5",  "Technical", "Directional accuracy is modest (56–62% at 1–6 months)"),
+        ("L6",  "Material", "No transactions volume data"),
+        ("L7",  "Significant", "C1 valuation is the only empirically validated signal"),
+        ("L8",  "Technical", "Cycle signal (C2) has only partial empirical support"),
+        ("L9",  "Significant", "Downside, affordability, and yield signals are descriptive only"),
+        ("L10", "Significant", "12-month score signal is weak and non-monotonic"),
+        ("L11", "Technical", "Score IR cannot be verified in current market conditions"),
+        ("L12", "Technical", "Regression on regional averages; property-level factors not captured"),
+        ("L13", "Significant", "Annual data interpolated to monthly — timing within year unreliable"),
+        ("L14", "Material", "Northern Ireland calibration gap; Wales/Scotland data sparser"),
+        ("L15", "Technical", "Residual autocorrelation present in 9 of 12 regions"),
+        ("L16", "Technical", "Not tested against structural breaks outside training window"),
+        ("L17", "Technical", "Simulated baseline median understates historical 5-year return"),
+        ("L18", "Significant", "Scenario paths conditional on assumed macro trajectories"),
+        ("L19", "Significant", "Scenario Lab is a perturbation tool, not a full model re-run"),
+        ("L20", "Significant", "Scores are research indicators, not investment advice"),
+        ("L21", "Technical", "Score labels can create false precision without component decomposition"),
+        ("L22", "Material", "Held-out validation remains below forecasting sign-off standard"),
+    ]
+    with st.expander("Quick-reference index (all L-numbers)", expanded=False):
+        _tier_colours = {"Material": "#d32f2f", "Significant": "#f57c00", "Technical": "#616161"}
+        st.dataframe(
+            _pd_lim.DataFrame(_LREF, columns=["L-number", "Tier", "Short title"]),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption("Expand the sections below to read each limitation in full.")
+
     # -----------------------------------------------------------------------
     # Tier 1 — Material Risks (always visible, no expander)
     # -----------------------------------------------------------------------
@@ -119,8 +153,9 @@ def render_limitations() -> None:
     # -----------------------------------------------------------------------
     # Tier 2 — Significant Limitations
     # -----------------------------------------------------------------------
-    with st.expander("Significant limitations \u2014 click to review", expanded=False):
-        st.warning(f"""
+    st.markdown("#### Significant Limitations")
+    _TIER2 = [
+        ("L2", f"Source series have unequal coverage endpoints", f"""
 **L2 \u2014 Source series have unequal coverage endpoints.**
 The canonical model panel stops at the weakest OLS model input (HMRC
 transactions, {meta.get("weakest_model_input_end", "2025-10-01")}). Rental
@@ -128,8 +163,8 @@ yield is forward-filled from its last quarterly observation (within the
 18-month governance limit; see R025). Land Registry house prices extend to
 {meta.get("latest_house_price_end", "2025-12-01")} and are descriptive context
 only. Rental levels end {meta.get("latest_rental_level_end", "2025-02-01")}.
-""")
-        st.warning(f"""
+"""),
+        ("L3", "Publication lags in earnings and population data", f"""
 **L3 \u2014 Publication lags mean that even the endpoint reflects data
 available somewhat later.**
 Annual earnings data (ASHE) has a publication lag of approximately six months.
@@ -137,8 +172,8 @@ Regional population data has a lag of approximately twelve months. The
 `effective_data_as_of` field in the panel metadata (**{effective}**) reports
 the date at which all series would have been simultaneously available to a
 real-time analyst.
-""")
-        st.warning("""
+"""),
+        ("L4", "Model does not beat zero-growth RMSE in 2022\u20132025 holdout", """
 **L4 \u2014 The model does not reliably beat zero-growth on RMSE in the
 2022\u20132025 holdout period.**
 In out-of-sample testing across the 2022\u20132025 period \u2014 which
@@ -147,8 +182,8 @@ coincides with the UK\u2019s most severe mortgage repricing shock since 2008
 naive zero-growth baseline. This is a period structurally different from the
 2005\u20132021 training window. Forecasts should not be read as superior to a
 simple market-consensus view during regime changes.
-""")
-        st.warning("""
+"""),
+        ("L7", "C1 valuation is the only empirically validated signal", """
 **L7 \u2014 The valuation signal (C1 mispricing) is the only empirically
 validated signal.**
 The valuation signal, derived from the Stage 4 log fair-value gap, shows a
@@ -156,8 +191,8 @@ statistically meaningful forward-return spread at 36-month and 60-month
 horizons (36-percentage-point spread between Supportive and Cautious regions
 at 60 months, based on the historical backtest). This is the primary evidence
 base for the model\u2019s usefulness as a research tool.
-""")
-        st.warning("""
+"""),
+        ("L9", "Downside, affordability, and yield signals are descriptive only", """
 **L9 \u2014 Downside, affordability, and yield signals are descriptive
 only.**
 These signals compress scenario outcomes and user-specific financial metrics
@@ -165,15 +200,15 @@ into scores. They have not been backtested against realised investment
 outcomes. They are useful for framing the risk environment and for
 user-specific affordability analysis, but they should not be presented as
 validated forward-return predictors.
-""")
-        st.warning("""
+"""),
+        ("L10", "12-month score signal is weak and non-monotonic", """
 **L10 \u2014 The 12-month score signal is weak and non-monotonic.**
 Backtest evidence shows that Supportive-vs-Cautious return spread at 12 months
 is not reliable and is not monotonic across the score range. The threshold
 calibration is anchored to 36-month evidence. Users should not rely on signals
 for short-horizon decisions without this qualification.
-""")
-        st.warning("""
+"""),
+        ("L13", "Annual data interpolated to monthly — timing within year unreliable", """
 **L13 \u2014 Annual data series are interpolated to monthly frequency; timing
 precision within a calendar year is unreliable.**
 Earnings (ASHE), housing supply (MHCLG), population (ONS mid-year estimates),
@@ -184,24 +219,24 @@ features \u2014 should not be used to draw conclusions about timing within a
 single calendar year. Flag columns `earnings_growth_12m_lag1_is_interpolated`
 and `net_additions_monthly_is_interpolated` in the canonical panel and Stage 4
 output identify affected observations.
-""")
-        st.warning("""
+"""),
+        ("L18", "Scenario paths conditional on assumed macro trajectories", """
 **L18 \u2014 Scenario paths are conditional on assumed macro trajectories.**
 Each of the five scenario presets (Baseline, Soft_Landing, Rate_Shock,
 Stagflation, Recovery_Boom) embeds expert-designed assumptions about rate
 shifts, income growth, stress overlays, and regime probabilities. These
 assumptions are internally consistent but are not derived from a macro model.
 The model cannot tell users which scenario is more likely to occur.
-""")
-        st.warning("""
+"""),
+        ("L19", "Scenario Lab is a perturbation tool, not a full model re-run", """
 **L19 \u2014 The interactive Scenario Lab is a calibrated perturbation tool,
 not a full model re-run.**
 The live simulation in the dashboard perturbs fair-value anchors and volatility
 around calibrated values. It does not re-estimate OLS coefficients or recompute
 P&#42;. Extreme user-specified overrides (rate shifts > 150\u00a0bps, volatility
 multipliers > 1.5\u00d7) trigger a warning in the UI but are not prevented.
-""")
-        st.warning("""
+"""),
+        ("L20", "Scores are research indicators, not investment advice", """
 **L20 \u2014 Scores are descriptive research indicators, not investment
 advice.**
 Supportive, Mixed, and Cautious labels are research bucketing tools calibrated
@@ -209,53 +244,58 @@ to the historical valuation signal. They are not recommendations to buy, hold,
 or sell any property or security. The composite consumer and REIT scores blend
 empirically-supported and descriptive-only signals using expert weights; they
 have not been backtested as trading signals and should not be used as such.
-""")
+"""),
+    ]
+    for _lnum, _title, _body in _TIER2:
+        with st.expander(f"{_lnum} — {_title}", expanded=False):
+            st.warning(_body)
 
     # -----------------------------------------------------------------------
     # Tier 3 — Technical Notes
     # -----------------------------------------------------------------------
-    with st.expander("Technical notes", expanded=False):
-        st.info("""
+    st.markdown("#### Technical Notes")
+    _TIER3 = [
+        ("L5", "Directional accuracy is modest", """
 **L5 \u2014 Directional accuracy is modest.**
 The model correctly calls the direction of monthly price movements 56\u201362%
 of the time at 1\u20136 month horizons, and approximately 50% (coin-flip) at
 12 months. This is better than random, but it is not a high-confidence timing
 signal. The model is more valuable as a relative valuation framework and
 scenario organiser than as a short-horizon price direction predictor.
-""")
-        st.info("""
+"""),
+        ("L8", "Cycle signal (C2) has only partial empirical support", """
 **L8 \u2014 The cycle and momentum signal (C2) has only partial empirical
 support.**
 The cycle signal is informed by the OLS growth equation and the scenario
 simulation path. It has directional plausibility but weaker validated
 return-predictive power than the valuation signal at any tested horizon. It
 should be treated as cycle context rather than a timing rule.
-""")
-        st.info("""
+"""),
+        ("L11", "Score IR cannot be verified in current market conditions", """
 **L11 \u2014 Score information ratio cannot be computed in current
 conditions.**
 As of the model observation date, all 12 regions score \u2265\u202045, leaving
 no Cautious contrast group. The historical backtest IR of 0.68 at 36 months
 remains the primary evidence, but this cannot be verified against current
 market conditions until market repricing produces regions scoring below 45.
-""")
-        st.info("""
+"""),
+        ("L12", "Regression on regional averages — property-level factors not captured", """
 **L12 \u2014 Regression operates on regional averages; property-level factors
 are not captured.**
 The model does not observe individual borrower credit quality, mortgage product
 mix, property condition, floor area, local micro-market dynamics, or tax
 position. All signals apply to a notional regional average property. Actual
 returns on specific properties will differ materially.
-""")
-        st.info("""
+"""),
+        ("L15", "Residual autocorrelation present in 9 of 12 regions", """
 **L15 \u2014 Residual autocorrelation is present in 9 of 12 regions.**
 Breusch-Godfrey order-3 tests confirm autocorrelated residuals in most
 regions. This reflects UK macroeconomic cycle persistence rather than a
 correctable model misspecification, but it means HAC (Newey-West) standard
 errors must be used for all inference, and the model does not fully capture
 serial dependencies in price dynamics.
-""")
-        st.info("""
+"""),
+        ("L16", "Not tested against structural breaks outside training window", """
 **L16 \u2014 The model has not been tested against structural breaks outside
 the training window.**
 The calibration period (2005\u20132025) includes the 2008 global financial
@@ -263,8 +303,8 @@ crisis and the 2022\u20132024 rate shock, but does not include a sustained
 housing market crash of the magnitude seen in Ireland or the US in
 2008\u20132012, or pre-2005 UK episodes. Behaviour under conditions outside
 the training distribution is unknown.
-""")
-        st.info("""
+"""),
+        ("L17", "Simulated baseline median understates historical 5-year return", """
 **L17 \u2014 The simulation baseline median substantially underestimates the
 historical 5-year return distribution.**
 Independent validation shows the simulated baseline median 5-year return is
@@ -272,15 +312,19 @@ Independent validation shows the simulated baseline median 5-year return is
 is useful for scenario ordering (which scenarios produce better/worse outcomes
 relative to each other) and for tail-risk assessment, but the absolute level
 of the simulated paths should not be read as a calibrated price forecast.
-""")
-        st.info("""
+"""),
+        ("L21", "Score labels can create false precision without component decomposition", """
 **L21 \u2014 Score labels can create false precision if read without the
 component decomposition.**
 A single composite score compresses four or more signal components into one
 number. The component-level breakdown and the evidence classification for each
 signal are essential context. Reviewers and users should always examine the
 full signal panel, not only the composite headline score.
-""")
+"""),
+    ]
+    for _lnum, _title, _body in _TIER3:
+        with st.expander(f"{_lnum} — {_title}", expanded=False):
+            st.info(_body)
 
     # -----------------------------------------------------------------------
     # Footer
