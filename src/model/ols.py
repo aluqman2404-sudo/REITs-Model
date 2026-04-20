@@ -69,7 +69,7 @@ def fit_structural_fair_value(
             if np.isfinite(coef) and (required_sign > 0 and coef < 0) or (required_sign < 0 and coef > 0):
                 _w.warn(
                     f"fit_structural_fair_value: {reg} coefficient {coef:+.4f} violates "
-                    f"sign constraint (required: {'+' if required_sign>0 else '-'}). "
+                    f"sign constraint (required: {'+' if required_sign > 0 else '-'}). "
                     "Applying floor: regressor fixed at sign-floor, remaining coefficients re-fitted.",
                     UserWarning, stacklevel=2
                 )
@@ -110,7 +110,6 @@ def fit_structural_fair_value(
             fit_constrained.resid = fit.resid
             # Predict using constrained params
             param_vec = pd.Series(full_params)
-            X_aligned = X.reindex(columns=param_vec.index, fill_value=0.0)
             fit_constrained.predict = lambda Xp: Xp.reindex(columns=param_vec.index, fill_value=0.0) @ param_vec
             fit = fit_constrained
 

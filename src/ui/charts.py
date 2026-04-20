@@ -6,7 +6,6 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
-from plotly.subplots import make_subplots
 
 INK = "#12355b"
 TEAL = "#0f766e"
@@ -20,6 +19,8 @@ def _hex_to_rgba(hex_colour: str, alpha: float) -> str:
     h = hex_colour.lstrip("#")
     r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
     return f"rgba({r},{g},{b},{alpha})"
+
+
 BG = "rgba(255,255,255,0)"
 
 _LAYOUT = dict(
@@ -312,7 +313,6 @@ def regional_rank_chart(
 # ---------------------------------------------------------------------------
 
 def yield_risk_chart(region_table: pd.DataFrame, selected_region: str) -> go.Figure:
-    colours = [band_colour(label) for label in region_table["reit_band"]]
     sizes = [18 if region == selected_region else 10 for region in region_table["region"]]
 
     fig = go.Figure()

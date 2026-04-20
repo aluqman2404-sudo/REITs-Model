@@ -9,8 +9,8 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-import streamlit as st
-from src.ui.views import (
+import streamlit as st  # noqa: E402
+from src.ui.views import (  # noqa: E402
     render_comparison_view,
     render_consumer_view,
     render_home,
@@ -19,9 +19,9 @@ from src.ui.views import (
     render_reit_view,
     render_scenario_lab,
 )
-from src.ui.pages.limitations import render_limitations
-from src.core.logging_utils import configure_monitoring, get_logger, log_model_event
-from src.core.config import load_config
+from src.ui.pages.limitations import render_limitations  # noqa: E402
+from src.core.logging_utils import configure_monitoring, get_logger, log_model_event  # noqa: E402
+from src.core.config import load_config  # noqa: E402
 
 
 # Configure monitoring before any Streamlit calls so the startup event is captured.

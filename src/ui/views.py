@@ -691,8 +691,13 @@ def render_home() -> None:
         _render_simulation_transparency(spotlight_region)
 
     with st.expander("Cross-regional orientation", expanded=False):
-        st.plotly_chart(regional_rank_chart(data.region_table, "consumer_score",
-                  spotlight_region, "Cross-regional synthesis orientation"), use_container_width=True)
+        st.plotly_chart(
+            regional_rank_chart(
+                data.region_table, "consumer_score",
+                spotlight_region, "Cross-regional synthesis orientation",
+            ),
+            use_container_width=True,
+        )
         st.caption("Cross-regional synthesis is shown for orientation only. Primary interpretation should come from the underlying signal panel.")
         st.plotly_chart(tail_risk_heatmap(data.simulation), use_container_width=True)
         st.caption(

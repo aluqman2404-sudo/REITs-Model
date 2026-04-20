@@ -90,7 +90,6 @@ def render_limitations() -> None:
         ("L22", "Material", "Held-out validation remains below forecasting sign-off standard"),
     ]
     with st.expander("Quick-reference index (all L-numbers)", expanded=False):
-        _tier_colours = {"Material": "#d32f2f", "Significant": "#f57c00", "Technical": "#616161"}
         st.dataframe(
             _pd_lim.DataFrame(_LREF, columns=["L-number", "Tier", "Short title"]),
             use_container_width=True,
@@ -155,7 +154,7 @@ def render_limitations() -> None:
     # -----------------------------------------------------------------------
     st.markdown("#### Significant Limitations")
     _TIER2 = [
-        ("L2", f"Source series have unequal coverage endpoints", f"""
+        ("L2", "Source series have unequal coverage endpoints", f"""
 **L2 \u2014 Source series have unequal coverage endpoints.**
 The canonical model panel stops at the weakest OLS model input (HMRC
 transactions, {meta.get("weakest_model_input_end", "2025-10-01")}). Rental
