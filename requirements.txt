@@ -1,35 +1,11 @@
 # Core analytics
 numpy>=1.26,<2.2
 pandas>=2.1,<2.3
-scipy>=1.11,<1.15
 python-dateutil>=2.8,<3
 
-# Econometrics
-statsmodels>=0.14,<0.15
-linearmodels>=5.4,<7
-
 # Visualisation and UI
-matplotlib>=3.8,<3.11
-seaborn>=0.13,<0.14
 plotly>=5.18,<7
 streamlit>=1.50,<1.60
 
-# Data acquisition and parsing
-requests>=2.31,<3
-httpx>=0.26,<0.29
-beautifulsoup4>=4.12,<5
-lxml>=4.9,<6
-odfpy>=1.4,<2
+# Optional — local dev only; on Cloud, secrets are env vars
 python-dotenv>=1.0,<2
-
-# Optional — install locally only (require system C libraries not available in CI)
-# folium>=0.15,<0.17
-# geopandas>=0.14,<1
-
-# Optional — install in production only (require boto3 / datadog agent)
-# watchtower>=3.0.0  # CloudWatch logging
-# datadog-lambda>=4.0.0  # Datadog logging
-
-# Testing
-pytest>=8.0,<9
-pytest-cov>=4.1,<6
